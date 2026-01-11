@@ -1,46 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  LogIn, 
-  LogOut, 
-  Key, 
-  UserCheck, 
-  Camera, 
-  Trash, 
-  CheckCircle, 
-  X, 
-  TowerControl as Tower,
-  Search,
-  History,
-  AlertCircle,
-  ShieldCheck,
-  Smartphone,
-  Info,
-  Clock,
-  RotateCcw,
-  Loader2,
-  Check,
-  MapPin,
-  User,
-  Shield,
-  Fingerprint,
-  Maximize2,
-  Building2,
-  BadgeCheck,
-  PhoneCall,
-  RefreshCw,
-  Flag,
-  Upload,
-  Lock,
-  ChevronRight,
-  AlertTriangle,
-  PlusCircle,
-  MinusCircle,
-  FlipHorizontal,
-  FileText
+  LogIn, LogOut, Key, UserCheck, Camera, X, TowerControl as Tower, Search, AlertCircle, ShieldCheck, 
+  Loader2, Check, MapPin, User, Shield, Fingerprint, FlipHorizontal, FileText, Hash, UserPlus, 
+  MessageSquare, Send, PlusCircle, MinusCircle, AlertTriangle, Clock
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
+import { WorkSite, SiteVisitor, KeyLog, VendorProfile, ChatMessage } from '../types';
 import { useNotify } from '../App';
 
 const VendorAccess: React.FC = () => {
@@ -55,8 +21,6 @@ const VendorAccess: React.FC = () => {
   
   const [location, setLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsVerified, setGpsVerified] = useState<boolean | null>(null);
-  const [distanceToSite, setDistanceToSite] = useState<number | null>(null);
-
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [streamActive, setStreamActive] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -64,11 +28,12 @@ const VendorAccess: React.FC = () => {
   const [keyBorrowValues, setKeyBorrowValues] = useState<any>(null);
   const [additionalPersonnel, setAdditionalPersonnel] = useState<string[]>([]);
   
-  const [nocLoginRequired, setNocLoginRequired] = useState<boolean>(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mapRef = useRef<any>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const { notify } = useNotify();
 
   const loadInitialData = async () => {
@@ -77,180 +42,125 @@ const VendorAccess: React.FC = () => {
       const vendor = apiService.getActiveVendor();
       if (fetchedSites) setSites(fetchedSites);
       setActiveVendor(vendor);
-    } catch (err) {
-      console.warn("Initial load sync failed", err);
-      notify('Local Ledger Mode Active', 'info');
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (err) { notify('Local Ledger Mode', 'info'); }
+    finally { setIsLoading(false); }
   };
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
+  useEffect(() => { loadInitialData(); }, []);
 
+  // Polling for FO authorization during Waiting state
   useEffect(() => {
     let interval: number | null = null;
     if (activeModal === 'Waiting' && selectedSite) {
       interval = window.setInterval(async () => {
-        try {
-          const freshSites = await apiService.getSites();
-          if (freshSites) setSites(freshSites);
-        } catch (e) {
-          console.warn("Polling bridge failed", e);
-        }
+        const freshSites = await apiService.getSites();
+        if (freshSites) setSites(freshSites);
       }, 3000);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [activeModal, selectedSite]);
 
+  // Polling for new messages if chat is open
+  useEffect(() => {
+    let interval: number | null = null;
+    if (showChat && selectedSite) {
+      interval = window.setInterval(async () => {
+        const msgs = await apiService.getMessages(selectedSite.id);
+        if (msgs) setChatMessages(msgs);
+      }, 3000);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [showChat, selectedSite]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (streamActive) {
-      const constraints = { 
-        video: { 
-          facingMode: facingMode, 
-          width: { ideal: 1920 }, 
-          height: { ideal: 1080 } 
-        }, 
-        audio: false 
-      };
-      navigator.mediaDevices.getUserMedia(constraints)
-        .then(s => {
-          stream = s;
-          if (videoRef.current) videoRef.current.srcObject = s;
-        })
-        .catch(err => {
-          notify('Camera access denied.', 'error');
-          setStreamActive(false);
-        });
+      navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false })
+        .then(s => { stream = s; if (videoRef.current) videoRef.current.srcObject = s; })
+        .catch(() => { notify('Camera access denied', 'error'); setStreamActive(false); });
     }
-    return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
+    return () => stream?.getTracks().forEach(t => t.stop());
   }, [streamActive, facingMode]);
 
   useEffect(() => {
-    if (streamActive && mapContainerRef.current && location && !mapRef.current) {
-      const L = (window as any).L;
-      if (!L) return;
-      const mapInstance = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false }).setView([location.lat, location.lng], 16);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-      L.marker([location.lat, location.lng]).addTo(mapInstance);
-      mapRef.current = mapInstance;
-    }
-    return () => { if (!streamActive && mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
-  }, [streamActive, location]);
-
-  useEffect(() => {
     let watchId: number | null = null;
-    if (streamActive) {
-      if ("geolocation" in navigator) {
-        watchId = navigator.geolocation.watchPosition(
-          (pos) => {
-            const { latitude, longitude, accuracy } = pos.coords;
-            setLocation({ lat: latitude, lng: longitude, accuracy });
-            if (selectedSite) verifyProximity(latitude, longitude);
-          },
-          (err) => console.error(err),
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      }
+    if (streamActive && "geolocation" in navigator) {
+      watchId = navigator.geolocation.watchPosition((pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        setLocation({ lat: latitude, lng: longitude, accuracy });
+        if (selectedSite?.gpsCoordinates) {
+          const coords = selectedSite.gpsCoordinates.split(',').map(n => parseFloat(n.trim()));
+          const d = 6371e3 * 2 * Math.atan2(Math.sqrt(Math.sin((coords[0]-latitude)*Math.PI/360)**2 + Math.cos(latitude*Math.PI/180)*Math.cos(coords[0]*Math.PI/180)*Math.sin((coords[1]-longitude)*Math.PI/360)**2), Math.sqrt(1-(Math.sin((coords[0]-latitude)*Math.PI/360)**2 + Math.cos(latitude*Math.PI/180)*Math.cos(coords[0]*Math.PI/180)*Math.sin((coords[1]-longitude)*Math.PI/360)**2)));
+          setGpsVerified(d < 800);
+        } else setGpsVerified(true);
+      });
     }
     return () => { if (watchId !== null) navigator.geolocation.clearWatch(watchId); };
   }, [streamActive, selectedSite]);
 
-  const verifyProximity = (lat: number, lng: number) => {
-    if (!selectedSite?.gpsCoordinates) return setGpsVerified(true);
-    const coords = selectedSite.gpsCoordinates.split(',').map(n => parseFloat(n.trim()));
-    if (isNaN(coords[0])) return setGpsVerified(true);
-    const d = calculateDistance(lat, lng, coords[0], coords[1] || 0);
-    setDistanceToSite(d);
-    setGpsVerified(d < 800); 
-  };
-
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  };
-
-  const capturePhoto = async () => {
+  const capturePhoto = () => {
     if (videoRef.current && location) {
-      const video = videoRef.current;
-      const canvas = document.createElement('canvas');
-      
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      const stampHeight = 350; // Increased stamp height for legibility
-      
-      canvas.width = videoWidth;
-      canvas.height = videoHeight + stampHeight;
-      const ctx = canvas.getContext('2d');
+      const v = videoRef.current;
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth; c.height = v.videoHeight + 350;
+      const ctx = c.getContext('2d');
       if (!ctx) return;
-
-      // Draw original video frame
       ctx.save();
-      if (facingMode === 'user') {
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
-      } else {
-        ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
-      }
+      if (facingMode === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
       ctx.restore();
-
-      // Draw background for stamp
-      ctx.fillStyle = "#0f172a"; // slate-900
-      ctx.fillRect(0, videoHeight, canvas.width, stampHeight);
-
-      // Forensic stamping (Large Text)
-      const ledger = [
-        ["OPERATOR", activeVendor?.fullName?.toUpperCase() || "UNAUTHORIZED"],
-        ["VENDOR", activeVendor?.company?.toUpperCase() || "GUEST_LEGAL"],
-        ["SITE", selectedSite?.name?.toUpperCase() || "UNKNOWN_NODE"],
-        ["ID", selectedSite?.id || "N/A"],
-        ["GPS", `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)} (Acc: ${location.accuracy.toFixed(1)}m)`],
-        ["TIME", new Date().toLocaleString()],
-        ["STATUS", gpsVerified ? 'PROXIMITY_LOCKED' : 'OUT_OF_BOUNDS']
-      ];
-
+      ctx.fillStyle = "#0f172a"; ctx.fillRect(0, v.videoHeight, c.width, 350);
+      const ledger = [["OPERATOR", activeVendor?.fullName?.toUpperCase() || "NEW_VENDOR"], ["SITE", selectedSite?.name?.toUpperCase() || "N/A"], ["GPS", `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`], ["TIME", new Date().toLocaleString()]];
       ctx.textAlign = "left";
-      ledger.forEach((row, i) => {
-        ctx.font = "900 24px Inter, sans-serif";
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        ctx.fillText(row[0], 60, videoHeight + 70 + (i * 40));
-        
-        ctx.font = "bold 26px Inter, sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(row[1], 300, videoHeight + 70 + (i * 40));
+      ledger.forEach((r, i) => {
+        ctx.font = "900 24px Inter"; ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.fillText(r[0], 60, v.videoHeight + 70 + (i * 42));
+        ctx.font = "bold 26px Inter"; ctx.fillStyle = "#ffffff"; ctx.fillText(r[1], 300, v.videoHeight + 70 + (i * 42));
       });
-
-      // Watermark
-      ctx.font = "italic bold 18px Inter, sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.1)";
-      ctx.fillText("FIELDOPS PRO FORENSIC SEAL v2.0", canvas.width - 400, videoHeight + stampHeight - 30);
-
-      setCapturedPhoto(canvas.toDataURL('image/jpeg', 0.9));
-      stopCamera();
+      setCapturedPhoto(c.toDataURL('image/jpeg', 0.9)); setStreamActive(false);
     }
   };
 
-  const startCamera = (mode: 'user' | 'environment') => { setFacingMode(mode); setStreamActive(true); };
-  const stopCamera = () => { setStreamActive(false); };
-  const toggleCamera = () => setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+  const startCamera = (mode: 'user' | 'environment') => {
+    setFacingMode(mode);
+    setStreamActive(true);
+    setCapturedPhoto(null);
+  };
+
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const formData = new FormData(e.currentTarget);
+    const username = (formData.get('username') as string || '').trim().toUpperCase();
+    const password = (formData.get('password') as string || '').trim().toUpperCase();
+
+    try {
+      const vendor = await apiService.loginVendor(username, password);
+      if (vendor) {
+        setActiveVendor(vendor);
+        localStorage.setItem('fo_active_vendor_id', vendor.id);
+        closeModals();
+        notify('Kiosk Authorization Successful', 'success');
+      } else {
+        notify('Invalid Credentials Provided', 'error');
+      }
+    } catch (err) {
+      notify('Authentication Network Failure', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!capturedPhoto) return notify('Photo ID required', 'error');
+    if (!capturedPhoto) return notify('Identification Photo Required', 'error');
+    setIsSubmitting(true);
     const f = new FormData(e.currentTarget);
-    const vendor: any = {
+    const vendor: VendorProfile = {
       id: `VND-${Date.now()}`,
-      username: (f.get('username') as string).trim().toUpperCase(),
-      password: (f.get('password') as string).toUpperCase(),
+      username: (f.get('username') as string || '').trim().toUpperCase(),
+      password: (f.get('password') as string || '').trim().toUpperCase(),
       fullName: f.get('fullName') as string,
       company: f.get('company') as string,
       contactNumber: f.get('contactNumber') as string,
@@ -260,120 +170,29 @@ const VendorAccess: React.FC = () => {
       verified: true,
       createdAt: new Date().toISOString()
     };
-    setIsSubmitting(true);
+
     try {
       const result = await apiService.registerVendor(vendor);
-      if (result) {
-        setActiveVendor(result);
-        localStorage.setItem('fo_active_vendor_id', result.id);
-        closeModals();
-        notify('Registration successful', 'success');
-      }
-    } catch (err: any) { notify(err.message || 'Registration failed', 'error'); }
-    finally { setIsSubmitting(false); }
-  };
-
-  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const username = (f.get('username') as string)?.trim().toUpperCase();
-    const password = (f.get('password') as string)?.toUpperCase();
-    
-    if (!username) return notify('Username required', 'error');
-    if (!password) return notify('Password required', 'error');
-    
-    setIsSubmitting(true);
-    try {
-      const result = await apiService.loginVendor(username, password);
-      if (result && result.id) {
-        setActiveVendor(result);
-        localStorage.setItem('fo_active_vendor_id', result.id);
-        closeModals();
-        notify('Access granted', 'success');
-      } else { 
-        notify('Invalid username or password', 'error'); 
-      }
-    } catch (err: any) { 
-      notify(err.message || 'Authentication failed', 'error'); 
-    } finally { 
-      setIsSubmitting(false); 
+      setActiveVendor(result);
+      localStorage.setItem('fo_active_vendor_id', result.id);
+      closeModals();
+      notify('Vendor Registration Successful', 'success');
+    } catch (err) {
+      notify('Registration Failed', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleLoginProtocolSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!capturedPhoto) return notify('Evidence required', 'error');
-    if (gpsVerified === false) return notify('Proximity Error (within 800m).', 'error');
-    const f = new FormData(e.currentTarget);
-    setLoginFormValues({ 
-      activity: f.get('activity'),
-      rawaNumber: f.get('rawaNumber'),
-      checkedBy: f.get('checkedBy'),
-      startTime: f.get('startTime'),
-      expectedEndTime: f.get('expectedEndTime'),
-      personnel: [activeVendor?.fullName, ...additionalPersonnel],
-      rocName: f.get('rocName'),
-      rocTime: f.get('rocTime')
-    });
-    setWaitingFor('SITE');
-    setActiveModal('Disclaimer');
-  };
-
-  const handleKeyBorrowSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!capturedPhoto) return notify('Evidence required', 'error');
-    const f = new FormData(e.currentTarget);
-    setKeyBorrowValues({
-      borrowerName: activeVendor?.fullName,
-      borrowerId: activeVendor?.idNumber,
-      borrowerContact: activeVendor?.contactNumber,
-      vendor: activeVendor?.company,
-      rawaNumber: f.get('rawaNumber'),
-      reason: f.get('reason'),
-      releasedBy: f.get('releasedBy'),
-      borrowPhoto: capturedPhoto
-    });
-    setWaitingFor('KEY');
-    setActiveModal('Disclaimer');
-  };
-
-  const handleLogoutProtocolSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedSite || !capturedPhoto) return notify('Exit evidence required', 'error');
-    const f = new FormData(e.currentTarget);
-    setIsSubmitting(true);
-    
-    const logoutData = {
-      name: f.get('rocName') as string,
-      time: f.get('rocTime') as string,
-      nocLogged: nocLoginRequired,
-      nocLoginName: f.get('nocLoginName') as string,
-      nocLoginTime: f.get('nocLoginTime') as string,
-      nocLogoutName: f.get('nocLogoutName') as string,
-      nocLogoutTime: f.get('nocLogoutTime') as string,
-      activityRemarks: f.get('activityRemarks') as string
-    };
-
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !selectedSite || !activeVendor) return;
+    const msg = { siteId: selectedSite.id, senderId: activeVendor.id, senderName: activeVendor.fullName, role: 'VENDOR' as const, content: chatInput };
+    setChatInput('');
     try {
-      await apiService.checkOutVendor(selectedSite.id, capturedPhoto, logoutData);
-      notify('Operation logged out successfully', 'success');
-      closeModals();
-      loadInitialData();
-    } catch (err) { notify('Checkout failed', 'error'); }
-    finally { setIsSubmitting(false); }
-  };
-
-  const handleKeyReturnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!selectedSite || !capturedPhoto) return notify('Return evidence required', 'error');
-    setIsSubmitting(true);
-    try {
-      await apiService.returnKey(selectedSite.id, capturedPhoto);
-      notify('Key returned to vault', 'success');
-      closeModals();
-      loadInitialData();
-    } catch (err) { notify('Return failed', 'error'); }
-    finally { setIsSubmitting(false); }
+      await apiService.sendMessage(msg);
+      const msgs = await apiService.getMessages(selectedSite.id);
+      if (msgs) setChatMessages(msgs);
+    } catch (err) { notify('Message failed to send', 'error'); }
   };
 
   const finalizeRequest = async () => {
@@ -382,70 +201,33 @@ const VendorAccess: React.FC = () => {
     try {
       if (waitingFor === 'SITE') {
         await apiService.requestAccess(selectedSite.id, {
-          vendorId: activeVendor.id, 
-          leadName: activeVendor.fullName, 
-          contactNumber: activeVendor.contactNumber,
-          personnel: loginFormValues.personnel, 
-          vendor: activeVendor.company, 
-          activity: loginFormValues.activity as string,
-          rawaNumber: loginFormValues.rawaNumber as string,
-          checkedBy: loginFormValues.checkedBy as string,
-          startTime: loginFormValues.startTime as string,
-          expectedEndTime: loginFormValues.expectedEndTime as string,
-          photo: capturedPhoto || undefined,
-          rocLogged: true, 
-          rocName: loginFormValues.rocName as string,
-          rocTime: loginFormValues.rocTime as string, 
-          nocLogged: false
+          vendorId: activeVendor.id, leadName: activeVendor.fullName, contactNumber: activeVendor.contactNumber,
+          personnel: [activeVendor.fullName, ...additionalPersonnel], vendor: activeVendor.company, 
+          activity: loginFormValues.activity, rawaNumber: loginFormValues.rawaNumber, checkedBy: loginFormValues.checkedBy,
+          startTime: loginFormValues.startTime, expectedEndTime: loginFormValues.expectedEndTime, photo: capturedPhoto || undefined,
+          rocLogged: true, rocName: loginFormValues.rocName, rocTime: loginFormValues.rocTime, nocLogged: false
         });
       } else if (waitingFor === 'KEY') {
         await apiService.requestKeyBorrow(selectedSite.id, { 
-          siteId: selectedSite.id, 
-          siteName: selectedSite.name, 
-          ...keyBorrowValues 
+          siteId: selectedSite.id, siteName: selectedSite.name, ...keyBorrowValues 
         });
       }
       setActiveModal('Waiting');
-    } catch (err) { 
-      notify('Network Error', 'error'); 
-    } finally { 
-      setIsSubmitting(false); 
-    }
+    } catch (err) { notify('Transmission Failed', 'error'); }
+    finally { setIsSubmitting(false); }
   };
 
   const confirmAccess = async () => {
     if (!selectedSite) return;
-    try {
-      const freshSites = await apiService.getSites();
-      const site = freshSites.find(s => s.id === selectedSite.id);
-      if (waitingFor === 'SITE' && site?.pendingVisitor) {
-        await apiService.checkInVendor(site.id, site.pendingVisitor);
-        notify('Protocol Confirmed.', 'success');
-      } else if (waitingFor === 'KEY' && site?.pendingKeyLog) {
-        await apiService.confirmKeyBorrow(site.id);
-        notify('Key Custody Transferred.', 'success');
-      }
-      closeModals();
-      loadInitialData();
-    } catch (err) { notify('Sync error', 'error'); }
+    const freshSites = await apiService.getSites();
+    const site = freshSites.find(s => s.id === selectedSite.id);
+    if (waitingFor === 'SITE' && site?.pendingVisitor) await apiService.checkInVendor(site.id, site.pendingVisitor);
+    else if (waitingFor === 'KEY' && site?.pendingKeyLog) await apiService.confirmKeyBorrow(site.id);
+    closeModals();
+    loadInitialData();
   };
 
-  const closeModals = () => { 
-    setActiveModal(null); 
-    setCapturedPhoto(null); 
-    setWaitingFor(null); 
-    setStreamActive(false); 
-    setAdditionalPersonnel([]); 
-    setNocLoginRequired(false);
-  };
-
-  const addPersonnelField = () => setAdditionalPersonnel([...additionalPersonnel, '']);
-  const removePersonnelField = (index: number) => setAdditionalPersonnel(additionalPersonnel.filter((_, i) => i !== index));
-  const updatePersonnelName = (index: number, name: string) => {
-    const updated = [...additionalPersonnel];
-    updated[index] = name;
-    setAdditionalPersonnel(updated);
-  };
+  const closeModals = () => { setActiveModal(null); setWaitingFor(null); setCapturedPhoto(null); setStreamActive(false); setAdditionalPersonnel([]); setShowChat(false); };
 
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
@@ -458,39 +240,72 @@ const VendorAccess: React.FC = () => {
       {streamActive && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center">
           <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
-          <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8">
-            <div className="flex justify-between items-start pointer-events-auto">
-               <div className="w-48 h-48 bg-slate-900 rounded-3xl border border-white/15 p-1 overflow-hidden"><div ref={mapContainerRef} className="w-full h-full rounded-2xl"></div></div>
-               <div className="flex space-x-2">
-                 <button onClick={toggleCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-blue-600 transition-colors"><FlipHorizontal size={24} /></button>
-                 <button onClick={stopCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-rose-600 transition-colors"><X size={24} /></button>
-               </div>
+          <div className="absolute inset-0 p-8 flex flex-col justify-between pointer-events-none">
+            <div className="flex justify-end pointer-events-auto gap-2">
+              <button onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')} className="p-4 bg-black/60 text-white rounded-full"><FlipHorizontal size={24} /></button>
+              <button onClick={() => setStreamActive(false)} className="p-4 bg-black/60 text-white rounded-full"><X size={24} /></button>
             </div>
-            <div className="flex flex-col items-center space-y-6 pointer-events-auto">
-               <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${gpsVerified ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
-                  {gpsVerified === null ? 'LOCATING ASSET...' : gpsVerified ? 'PROXIMITY_LOCKED' : 'ASSET_OUT_OF_BOUNDS'}
-               </div>
-               <button onClick={capturePhoto} className="w-24 h-24 bg-white rounded-full border-[6px] border-white/20 flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all">
-                  <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white"><Camera size={32} /></div>
-               </button>
+            <div className="flex flex-col items-center pointer-events-auto gap-6">
+              <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest border ${gpsVerified ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                {gpsVerified === null ? 'LOCATING...' : gpsVerified ? 'PROXIMITY_LOCK' : 'ASSET_OUT_OF_BOUNDS'}
+              </span>
+              <button onClick={capturePhoto} className="w-24 h-24 bg-white rounded-full border-[6px] border-white/20 flex items-center justify-center shadow-2xl">
+                <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white"><Camera size={32} /></div>
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* CHAT BOX */}
+      {showChat && selectedSite && (
+        <div className="fixed bottom-24 right-8 z-[180] w-full max-w-sm h-[500px] bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
+          <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-blue-600 rounded-2xl flex items-center justify-center"><Shield size={20} /></div>
+              <div><p className="text-xs font-black uppercase leading-tight">FO Support</p><p className="text-[9px] text-blue-400 font-bold uppercase">{selectedSite.name}</p></div>
+            </div>
+            <button onClick={() => setShowChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+            {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">No messages yet. Direct link to Field Officer active.</p>}
+            {chatMessages.map(m => (
+              <div key={m.id} className={`flex ${m.role === 'VENDOR' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-4 rounded-3xl text-xs font-medium shadow-sm ${m.role === 'VENDOR' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
+                  <p>{m.content}</p>
+                  <p className={`text-[8px] mt-2 font-bold ${m.role === 'VENDOR' ? 'text-blue-200' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} placeholder="Message Field Officer..." className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-xs font-black uppercase outline-none focus:ring-2 focus:ring-blue-600" />
+            <button onClick={handleSendMessage} className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20"><Send size={18} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING CHAT BUTTON */}
+      {activeVendor && selectedSite && !showChat && (
+        <button onClick={() => setShowChat(true)} className="fixed bottom-8 right-8 z-[170] h-16 w-16 bg-blue-600 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all animate-bounce">
+          <MessageSquare size={28} />
+        </button>
+      )}
+
       {!activeVendor ? (
-        <div className="max-w-xl mx-auto space-y-12 py-20 text-center">
+        <div className="max-w-xl mx-auto space-y-12 py-20 text-center animate-in zoom-in">
            <div className="space-y-4">
               <div className="h-20 w-20 bg-slate-900 text-white rounded-2xl mx-auto flex items-center justify-center shadow-2xl"><Shield size={40} /></div>
               <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Vendor Protocol Hub</h1>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Digital Site Custody System</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Case-Insensitive Secure Portal</p>
            </div>
            <div className="grid grid-cols-2 gap-6">
-              <button onClick={() => setActiveModal('Registration')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-blue-500 hover:shadow-2xl hover:-translate-y-1 transition-all flex flex-col items-center space-y-4">
+              <button onClick={() => setActiveModal('Registration')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-blue-500 transition-all flex flex-col items-center gap-4">
                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Fingerprint size={32} /></div>
                  <h3 className="text-sm font-black uppercase tracking-tight">Register</h3>
               </button>
-              <button onClick={() => setActiveModal('PersonnelLogin')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-emerald-500 hover:shadow-2xl hover:-translate-y-1 transition-all flex flex-col items-center space-y-4">
+              <button onClick={() => setActiveModal('PersonnelLogin')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-emerald-500 transition-all flex flex-col items-center gap-4">
                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><LogIn size={32} /></div>
                  <h3 className="text-sm font-black uppercase tracking-tight">Login</h3>
               </button>
@@ -498,16 +313,13 @@ const VendorAccess: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-             <div className="text-left">
-               <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Operational Portal</h1>
-               <p className="text-blue-600 font-black uppercase text-[10px] tracking-widest mt-1">{activeVendor.fullName} • {activeVendor.company}</p>
-             </div>
-             <div className="flex items-center space-x-3">
-                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-sm">
+          <div className="flex justify-between items-center bg-white p-6 rounded-[40px] shadow-sm border border-slate-100">
+             <div><h1 className="text-2xl font-black uppercase tracking-tight leading-none">{activeVendor.fullName}</h1><p className="text-blue-600 font-black uppercase text-[10px] tracking-widest mt-1">{activeVendor.company}</p></div>
+             <div className="flex gap-2">
+                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden">
                    {activeVendor.photo ? <img src={activeVendor.photo} className="w-full h-full object-cover" /> : <User size={20} />}
                 </button>
-                <button onClick={() => { apiService.logoutVendor(); setActiveVendor(null); }} className="p-3 bg-slate-900 text-white rounded-xl hover:bg-rose-600 transition-colors shadow-lg"><LogOut size={20} /></button>
+                <button onClick={() => { apiService.logoutVendor(); setActiveVendor(null); }} className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-rose-600 transition-colors"><LogOut size={20} /></button>
              </div>
           </div>
 
@@ -515,41 +327,35 @@ const VendorAccess: React.FC = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input 
               type="text" 
-              placeholder="Filter sites by name or ID..."
-              className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:ring-4 focus:ring-blue-500/10"
+              placeholder="Search Site Registry..."
+              className="w-full pl-12 pr-6 py-4 bg-white border border-slate-100 rounded-3xl font-black text-sm uppercase outline-none focus:ring-4 focus:ring-blue-500/10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-10">
-            {sites.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.id.toLowerCase().includes(searchQuery.toLowerCase())).map((site) => (
-              <div key={site.id} className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:border-blue-500 transition-all hover:shadow-2xl hover:-translate-y-1">
-                <div className="p-8 space-y-4 flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {sites.filter(s => s.name.toUpperCase().includes(searchQuery.toUpperCase()) || s.id.toUpperCase().includes(searchQuery.toUpperCase())).map(s => (
+              <div key={s.id} className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden flex flex-col hover:shadow-2xl hover:border-blue-500 transition-all group">
+                <div className="p-8 flex-1 space-y-4">
                   <div className="flex justify-between items-start">
-                    <div className="p-3 bg-slate-50 rounded-xl text-slate-900"><Tower size={24} /></div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{site.id}</span>
+                    <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors"><Tower size={24} /></div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{s.id}</span>
                   </div>
-                  <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">{site.name}</h3>
-                  <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    <MapPin size={12} className="mr-1.5" /> {site.address}
-                  </div>
+                  <h3 className="text-xl font-black uppercase tracking-tight leading-tight">{s.name}</h3>
+                  <div className="flex items-center text-[10px] font-bold text-slate-400 uppercase"><MapPin size={12} className="mr-1" /> {s.address}</div>
                 </div>
                 <div className="p-6 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-3">
-                   {site.currentVisitor ? (
-                     <button onClick={() => { setSelectedSite(site); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110">End Operation</button>
+                   {s.currentVisitor ? (
+                     <button onClick={() => { setSelectedSite(s); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:brightness-110">End Operation</button>
                    ) : (
-                     <button onClick={() => { setSelectedSite(site); if (site.accessAuthorized) { setWaitingFor('SITE'); setActiveModal('Waiting'); } else setActiveModal('LoginProtocol'); }} className={`py-4 ${site.accessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-emerald-600'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110 transition-all`}>
-                       {site.accessAuthorized ? 'Authorized: Open Gate' : 'Request Entrance'}
+                     <button onClick={() => { setSelectedSite(s); if (s.accessAuthorized) { setWaitingFor('SITE'); setActiveModal('Waiting'); } else setActiveModal('LoginProtocol'); }} className={`py-4 ${s.accessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-emerald-600'} text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:brightness-110`}>
+                       {s.accessAuthorized ? 'Authorized: Check-in' : 'Request Access'}
                      </button>
                    )}
-                   {site.keyStatus === 'Borrowed' ? (
-                     <button onClick={() => { setSelectedSite(site); setActiveModal('KeyReturn'); }} className="py-4 bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110">Return Key</button>
-                   ) : (
-                     <button onClick={() => { setSelectedSite(site); if (site.keyAccessAuthorized) { setWaitingFor('KEY'); setActiveModal('Waiting'); } else setActiveModal('KeyBorrow'); }} className={`py-4 ${site.keyAccessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-slate-900'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110 transition-all`}>
-                       {site.keyAccessAuthorized ? 'Key: Confirm Release' : 'Borrow Key'}
-                     </button>
-                   )}
+                   <button onClick={() => { setSelectedSite(s); if (s.keyStatus === 'Borrowed') setActiveModal('KeyReturn'); else if (s.keyAccessAuthorized) { setWaitingFor('KEY'); setActiveModal('Waiting'); } else setActiveModal('KeyBorrow'); }} className={`py-4 ${s.keyStatus === 'Borrowed' ? 'bg-amber-600' : s.keyAccessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-slate-900'} text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:brightness-110`}>
+                     {s.keyStatus === 'Borrowed' ? 'Return Key' : s.keyAccessAuthorized ? 'Authorized: Take Key' : 'Borrow Key'}
+                   </button>
                 </div>
               </div>
             ))}
@@ -557,310 +363,99 @@ const VendorAccess: React.FC = () => {
         </>
       )}
 
-      {/* MODALS */}
-      {activeModal === 'Registration' && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in duration-300">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Vendor Registration</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleRegisterSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Forensic ID Photo</p></div>}
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label><input name="password" type="text" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Gov ID / License</label><input name="idNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1 md:col-span-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                 </div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all">{isSubmitting ? 'Syncing...' : 'Complete Forensic Registration'}</button>
-              </form>
-           </div>
-        </div>
-      )}
-
+      {/* LOGIN MODAL */}
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-              <div className="text-center space-y-2">
-                 <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div>
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Personnel Login</h2>
-              </div>
+              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight">Login</h2></div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                 <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Account Username</label>
-                    <div className="relative">
-                       <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                       <input name="username" required className="w-full p-4 pl-12 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-emerald-500 outline-none uppercase" placeholder="USERNAME" />
-                    </div>
-                 </div>
-                 <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Secure Password</label>
-                    <div className="relative">
-                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                       <input name="password" type="password" required className="w-full p-4 pl-12 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-emerald-500 outline-none uppercase" placeholder="PASSWORD" />
-                    </div>
-                 </div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all">{isSubmitting ? 'Verifying...' : 'Authorize Kiosk Access'}</button>
-                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl">{isSubmitting ? 'Verifying...' : 'Authorize Access'}</button>
+                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase">Cancel</button>
               </form>
            </div>
         </div>
       )}
 
-      {activeModal === 'LoginProtocol' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Full View Forensic ID</p></div>}
-                 </div>
-
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                       <h3 className="text-xs font-black uppercase tracking-widest text-blue-600">Personnel Data</h3>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Team Leader</label>
-                          <input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase outline-none border-2 border-transparent" />
-                       </div>
-                       <div className="space-y-2">
-                          <div className="flex items-center justify-between ml-1">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Attending Personnel</label>
-                            <button type="button" onClick={addPersonnelField} className="text-blue-600 hover:text-blue-800"><PlusCircle size={16} /></button>
-                          </div>
-                          <input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase outline-none border-2 border-transparent" />
-                          {additionalPersonnel.map((name, idx) => (
-                            <div key={idx} className="flex items-center space-x-2">
-                               <input placeholder="NAME OF PERSONNEL" value={name} onChange={(e) => updatePersonnelName(idx, e.target.value)} required className="flex-1 p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" />
-                               <button type="button" onClick={() => removePersonnelField(idx)} className="text-rose-500 hover:text-rose-700"><MinusCircle size={20} /></button>
-                            </div>
-                          ))}
-                       </div>
-                    </div>
-
-                    <div className="space-y-4">
-                       <h3 className="text-xs font-black uppercase tracking-widest text-emerald-600">Task Details</h3>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity</label>
-                          <input name="activity" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">RAWA Number</label>
-                          <input name="rawaNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Checked By (Guard/Caretaker)</label>
-                          <input name="checkedBy" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" />
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Start Date/Time</label>
-                       <input name="startTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" />
-                    </div>
-                    <div className="space-y-1">
-                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Expected End Date/Time</label>
-                       <input name="expectedEndTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" />
-                    </div>
-                 </div>
-
-                 <div className="bg-slate-900 rounded-[32px] p-6 space-y-4 text-white">
-                    <h3 className="text-xs font-black uppercase tracking-widest">ROC Log-in Registry</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                          <label className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">ROC Name</label>
-                          <input name="rocName" required className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-bold text-xs text-white uppercase outline-none focus:border-blue-500" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Login Timestamp</label>
-                          <input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-bold text-xs text-white uppercase outline-none focus:border-blue-500" />
-                       </div>
-                    </div>
-                 </div>
-
-                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-blue-700">Transmit to FO</button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'LogoutProtocol' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">End Operation Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleLogoutProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Full Site Evidence (Exit)</p></div>}
-                 </div>
-
-                 <div className="bg-slate-50 rounded-[32px] p-6 space-y-4 border border-slate-100">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-rose-600">ROC Log-out Details</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                          <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">ROC Name</label>
-                          <input name="rocName" required className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:ring-2 focus:ring-rose-500" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Log-out Timestamp</label>
-                          <input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:ring-2 focus:ring-rose-500" />
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="p-6 bg-blue-50/50 rounded-[32px] border border-blue-100 space-y-6">
-                    <div className="flex items-center justify-between">
-                       <h3 className="text-xs font-black uppercase tracking-widest text-blue-600">NOC Compliance Verification</h3>
-                       <div className="flex items-center space-x-4">
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                             <input type="radio" name="nocCheck" checked={nocLoginRequired} onChange={() => setNocLoginRequired(true)} className="w-4 h-4 text-blue-600" />
-                             <span className="text-[10px] font-black uppercase tracking-widest">Yes</span>
-                          </label>
-                          <label className="flex items-center space-x-2 cursor-pointer">
-                             <input type="radio" name="nocCheck" checked={!nocLoginRequired} onChange={() => setNocLoginRequired(false)} className="w-4 h-4 text-slate-400" />
-                             <span className="text-[10px] font-black uppercase tracking-widest">No</span>
-                          </label>
-                       </div>
-                    </div>
-                    
-                    {nocLoginRequired && (
-                       <div className="space-y-4 pt-4 border-t border-blue-100 animate-in fade-in slide-in-from-top-2">
-                          <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-1"><label className="text-[8px] font-black text-blue-400 uppercase ml-1">NOC Login Name</label><input name="nocLoginName" required className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs uppercase outline-none" /></div>
-                             <div className="space-y-1"><label className="text-[8px] font-black text-blue-400 uppercase ml-1">NOC Login Time</label><input name="nocLoginTime" type="datetime-local" required className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none" /></div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                             <div className="space-y-1"><label className="text-[8px] font-black text-blue-400 uppercase ml-1">NOC Logout Name</label><input name="nocLogoutName" required className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs uppercase outline-none" /></div>
-                             <div className="space-y-1"><label className="text-[8px] font-black text-blue-400 uppercase ml-1">NOC Logout Time</label><input name="nocLogoutTime" type="datetime-local" required className="w-full p-3 bg-white border border-blue-200 rounded-xl font-bold text-xs outline-none" /></div>
-                          </div>
-                       </div>
-                    )}
-                 </div>
-
-                 <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Remarks</label>
-                    <textarea name="activityRemarks" required rows={3} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm uppercase outline-none focus:ring-2 focus:ring-rose-500" placeholder="Describe site condition and work completed..."></textarea>
-                 </div>
-
-                 <button type="submit" className="w-full py-5 bg-rose-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-rose-700">Terminate Session</button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'KeyBorrow' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Key Request Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleKeyBorrowSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Vault Location Proof</p></div>}
-                 </div>
-                 <div className="space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">RAWA Number</label>
-                        <input name="rawaNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="REF-2024-XXXX" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason for borrowing site key</label>
-                        <input name="reason" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="e.g. Cabinet Access" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Released By</label>
-                        <input name="releasedBy" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Name of Guard or Caretaker" />
-                    </div>
-                 </div>
-                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-amber-700">Request Key Release</button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'KeyReturn' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Return Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleKeyReturnSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Key Back in Vault</p></div>}
-                 </div>
-                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 text-center space-y-3">
-                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Site: {selectedSite.name}</p>
-                   <p className="text-xs font-bold text-slate-900">Ensure the vault is physically locked before submission.</p>
-                 </div>
-                 <button type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-emerald-700">Complete Key Return</button>
-              </form>
-           </div>
-        </div>
-      )}
-
+      {/* REGISTRATION MODAL */}
       {activeModal === 'Registration' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in duration-300">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Vendor Registration</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleRegisterSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Forensic ID Photo</p></div>}
+           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Vendor Enrollment</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleRegisterSubmit} className="p-10 overflow-y-auto space-y-8">
+                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Forensic ID</p></div>}
                  </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label><input name="password" type="text" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Gov ID / License</label><input name="idNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1 md:col-span-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Username (Case-Insensitive)</label><input name="username" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">ID Number</label><input name="idNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
                  </div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all">{isSubmitting ? 'Syncing...' : 'Complete Forensic Registration'}</button>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl">{isSubmitting ? 'Processing...' : 'Complete Enrollment'}</button>
               </form>
            </div>
         </div>
       )}
 
-      {activeModal === 'Profile' && activeVendor && (
+      {/* KEY REQUEST MODAL */}
+      {activeModal === 'KeyBorrow' && selectedSite && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-sm rounded-[48px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
-              <div className="h-48 bg-slate-900 relative">
-                 {activeVendor.photo && <img src={activeVendor.photo} className="w-full h-full object-cover opacity-50" />}
-                 <button onClick={closeModals} className="absolute top-6 right-6 p-2 bg-white/20 text-white rounded-full hover:bg-white/40 transition-colors"><X size={20} /></button>
-                 <div className="absolute -bottom-10 left-10 h-24 w-24 rounded-3xl border-4 border-white overflow-hidden bg-slate-200">
-                    <img src={activeVendor.photo} className="w-full h-full object-cover" />
+           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Key Release Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Release Proof Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), rawaNumber: f.get('rawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => { startCamera('environment'); setWaitingFor('KEY'); }} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">{capturedPhoto && waitingFor === 'KEY' ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Proof</p></div>}</div>
+                 <div className="space-y-4">
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">RAWA Number</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="rawaNumber" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="REF-2024-XXXX" /></div></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Reason</label><div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="reason" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Purpose of borrowing" /></div></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Released By</label><div className="relative"><UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="releasedBy" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Guard or Caretaker Name" /></div></div>
                  </div>
-              </div>
-              <div className="p-10 pt-16 space-y-6">
-                 <div>
-                    <h2 className="text-2xl font-black uppercase tracking-tight">{activeVendor.fullName}</h2>
-                    <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{activeVendor.company}</p>
+                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl transition-all hover:bg-amber-700">Request Release</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* ACCESS REQUEST MODAL */}
+      {activeModal === 'LoginProtocol' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('ID Photo Required', 'error'); setLoginFormValues({ activity: f.get('activity'), rawaNumber: f.get('rawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => { startCamera('user'); setWaitingFor('SITE'); }} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">{capturedPhoto && waitingFor === 'SITE' ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Forensic ID</p></div>}</div>
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-blue-600 tracking-widest">Personnel</h3><input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase" /><button type="button" onClick={() => setAdditionalPersonnel(p => [...p, ''])} className="flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest"><PlusCircle size={14} /> Add Additional Team</button>{additionalPersonnel.map((p, i) => <div key={i} className="flex gap-2"><input value={p} onChange={e => { const updated = [...additionalPersonnel]; updated[i] = e.target.value; setAdditionalPersonnel(updated); }} className="flex-1 p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-blue-600" /><button type="button" onClick={() => setAdditionalPersonnel(prev => prev.filter((_, idx) => idx !== i))} className="text-rose-500"><MinusCircle size={20} /></button></div>)}</div>
+                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest">Task Matrix</h3><input name="activity" placeholder="Detailed Activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="rawaNumber" placeholder="RAWA Reference" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="checkedBy" placeholder="On-Site Guard Name" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /></div>
                  </div>
-                 <div className="space-y-3">
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">ID Number</span><span>{activeVendor.idNumber}</span></div>
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Contact</span><span>{activeVendor.contactNumber}</span></div>
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Status</span><span className="text-emerald-500">Verified</span></div>
-                 </div>
-                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase text-[10px] tracking-widest transition-colors hover:bg-slate-200">Close Profile</button>
-              </div>
+                 <div className="grid grid-cols-2 gap-4"><div><label className="text-[9px] font-black text-slate-400 uppercase">Start Time</label><input name="startTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Estimated Exit</label><input name="expectedEndTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div></div>
+                 <div className="bg-slate-900 rounded-[32px] p-6 text-white space-y-4"><h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">ROC Compliance</h3><div className="grid grid-cols-2 gap-4"><input name="rocName" placeholder="ROC Officer" required className="w-full p-3 bg-white/5 rounded-xl text-xs uppercase" /><input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white/5 rounded-xl text-xs" /></div></div>
+                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Confirm & Sign Transmission</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* WAITING MODAL */}
+      {activeModal === 'Waiting' && selectedSite && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl text-center">
+           <div className="bg-white w-full max-w-lg rounded-[48px] p-12 space-y-8 shadow-2xl animate-in fade-in duration-300">
+              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110 shadow-2xl shadow-emerald-500/20' : 'bg-slate-100 text-slate-400'}`}>{isAuthorized ? <Check size={64} className="animate-bounce" /> : <Loader2 size={64} className="animate-spin" />}</div>
+              <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-tight">{isAuthorized ? 'Authorization Signed' : 'Awaiting FO Remote Approval'}</h2>
+              {isAuthorized ? <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Complete Protocol & Proceed</button> : <div className="space-y-4"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Digital Hub Polling every 3s...</p><button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Abort Request</button></div>}
+           </div>
+        </div>
+      )}
+
+      {/* DISCLAIMER MODAL */}
+      {activeModal === 'Disclaimer' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
+           <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in">
+              <div className="text-center space-y-4"><div className="h-20 w-20 bg-blue-50 text-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-xl shadow-blue-500/10"><ShieldCheck size={40} /></div><h2 className="text-3xl font-black uppercase tracking-tighter">Sign Transmission</h2></div>
+              <div className="space-y-4 text-center"><p className="text-sm font-medium text-slate-500 leading-relaxed italic">I confirm physical presence at {selectedSite?.name} and verify that all provided forensic evidence is accurate and complete.</p><div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3 text-left"><AlertTriangle className="text-amber-500 shrink-0" size={20} /><p className="text-[9px] font-black uppercase text-slate-400 leading-tight">Operational liability and site custody transfers to vendor upon FO authorization.</p></div></div>
+              <div className="flex flex-col gap-3"><button onClick={finalizeRequest} disabled={isSubmitting} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl flex items-center justify-center gap-2 tracking-widest">{isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Digital Signature</>}</button><button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Back to Protocol</button></div>
            </div>
         </div>
       )}
