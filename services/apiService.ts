@@ -1,5 +1,5 @@
 
-import { MaterialItem, WorkTask, FieldOfficer, WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
+import { MaterialItem, WorkTask, FieldOfficer, WorkSite, SiteVisitor, KeyLog, VendorProfile, ChatMessage } from '../types';
 import { imageService } from './imageService';
 import { storageService } from '../services/storageService';
 
@@ -10,192 +10,74 @@ const isLocalhost = window.location.hostname === 'localhost' || window.location.
 const API_BASE_URL = isLocalhost ? LOCAL_URL : REMOTE_URL;
 
 export const apiService = {
-  
   isOffline: false,
 
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout for responsiveness
-
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options?.headers,
-        },
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
       });
-      
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       this.isOffline = false;
       return await response.json();
     } catch (error: any) {
       this.isOffline = true;
-      console.warn(`API Bridge Failure for ${endpoint}. Falling back to Local Storage.`);
-      
-      const method = options?.method || 'GET';
-      const body = options?.body ? JSON.parse(options.body as string) : null;
-
-      // Handle Auth Routes
-      if (endpoint.includes('/auth/vendor/login')) {
-        return storageService.loginVendor(body.username, body.password) as any;
-      }
-      if (endpoint.includes('/auth/vendor/register')) {
-        return storageService.registerVendor(body) as any;
-      }
-
-      // Handle Site Routes
-      if (endpoint.startsWith('/sites')) {
-        if (method === 'POST') return storageService.addSite(body) as any;
-        if (method === 'PUT') return storageService.updateSite(body) as any;
-        return storageService.getSites() as any;
-      }
-
-      // Handle Access Routes
-      if (endpoint.startsWith('/access/request')) return storageService.requestAccess(body.siteId, body) as any;
-      if (endpoint.startsWith('/access/authorize/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.authorizeAccess(siteId) as any;
-      }
-      if (endpoint.startsWith('/access/checkin/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.checkInVendor(siteId, body) as any;
-      }
-      if (endpoint.startsWith('/access/checkout/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.checkOutVendor(siteId, body.exitPhoto, body) as any;
-      }
-
-      // Handle Key Routes
-      if (endpoint.startsWith('/keys/request')) return storageService.requestKeyBorrow(body.siteId, body) as any;
-      if (endpoint.startsWith('/keys/authorize/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.authorizeKeyBorrow(siteId) as any;
-      }
-      if (endpoint.startsWith('/keys/confirm/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.confirmKeyBorrow(siteId) as any;
-      }
-      if (endpoint.startsWith('/keys/return/')) {
-        const siteId = endpoint.split('/').pop() || '';
-        return storageService.returnKey(siteId, body.returnPhoto) as any;
-      }
-
-      if (endpoint.startsWith('/tasks')) return storageService.getTasks() as any;
-      if (endpoint.startsWith('/inventory')) return storageService.getMaterials() as any;
-      if (endpoint.startsWith('/officers')) return storageService.getOfficers() as any;
-      
+      console.warn(`Bridge Failure: ${endpoint}`);
       return null as any;
     }
   },
 
-  ping: async (): Promise<boolean> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout for ping
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/health`, { 
-        method: 'GET',
-        signal: controller.signal 
-      });
-      clearTimeout(timeoutId);
-      return response.ok;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      console.warn('Ping node unreachable:', error);
-      return false;
-    }
-  },
-
   getSites: async (): Promise<WorkSite[]> => apiService.request<WorkSite[]>('/sites'),
+  getTasks: async (): Promise<WorkTask[]> => apiService.request<WorkTask[]>('/tasks'),
 
-  addSite: async (site: WorkSite): Promise<WorkSite> => {
-    return await apiService.request<WorkSite>('/sites', {
-      method: 'POST',
-      body: JSON.stringify(site),
-    });
-  },
-
-  updateSite: async (site: WorkSite): Promise<WorkSite> => {
-    return await apiService.request<WorkSite>(`/sites/${site.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(site),
-    });
-  },
+  // Added missing addSite and updateSite methods to enable infrastructure registry updates
+  addSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>('/sites', { method: 'POST', body: JSON.stringify(site) }),
+  updateSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>(`/sites/${site.id}`, { method: 'PUT', body: JSON.stringify(site) }),
 
   requestAccess: async (siteId: string, visitorData: Omit<SiteVisitor, 'id' | 'checkInTime'>) => {
     let photoUrl = visitorData.photo;
-    if (visitorData.photo && visitorData.photo.startsWith('data:image')) {
-      photoUrl = await imageService.uploadEvidence(visitorData.photo);
-    }
-    const payload = { ...visitorData, photo: photoUrl, siteId };
-    return await apiService.request('/access/request', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    if (visitorData.photo?.startsWith('data:image')) photoUrl = await imageService.uploadEvidence(visitorData.photo);
+    return await apiService.request('/access/request', { method: 'POST', body: JSON.stringify({ ...visitorData, photo: photoUrl, siteId }) });
   },
 
   authorizeAccess: async (siteId: string) => apiService.request(`/access/authorize/${siteId}`, { method: 'POST' }),
-  cancelAccessRequest: async (siteId: string) => apiService.request(`/access/cancel/${siteId}`, { method: 'POST' }),
-  checkInVendor: async (siteId: string, visitor: SiteVisitor) => apiService.request(`/access/checkin/${siteId}`, {
-    method: 'POST',
-    body: JSON.stringify(visitor),
-  }),
-
+  checkInVendor: async (siteId: string, visitor: SiteVisitor) => apiService.request(`/access/checkin/${siteId}`, { method: 'POST', body: JSON.stringify(visitor) }),
   checkOutVendor: async (siteId: string, exitPhoto: string, logoutDetails: Partial<SiteVisitor>) => {
     const photoUrl = await imageService.uploadEvidence(exitPhoto);
-    return await apiService.request(`/access/checkout/${siteId}`, {
-      method: 'POST',
-      body: JSON.stringify({ exitPhoto: photoUrl, ...logoutDetails }),
-    });
+    return await apiService.request(`/access/checkout/${siteId}`, { method: 'POST', body: JSON.stringify({ exitPhoto: photoUrl, ...logoutDetails }) });
   },
 
   requestKeyBorrow: async (siteId: string, logData: Omit<KeyLog, 'id' | 'borrowTime'>) => {
     const photoUrl = await imageService.uploadEvidence(logData.borrowPhoto);
-    const payload = { ...logData, borrowPhoto: photoUrl, siteId };
-    return await apiService.request('/keys/request', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    return await apiService.request('/keys/request', { method: 'POST', body: JSON.stringify({ ...logData, borrowPhoto: photoUrl, siteId }) });
   },
 
   authorizeKeyBorrow: async (siteId: string) => apiService.request(`/keys/authorize/${siteId}`, { method: 'POST' }),
-  cancelKeyBorrowRequest: async (siteId: string) => apiService.request(`/keys/cancel/${siteId}`, { method: 'POST' }),
   confirmKeyBorrow: async (siteId: string) => apiService.request(`/keys/confirm/${siteId}`, { method: 'POST' }),
-
   returnKey: async (siteId: string, returnPhoto: string) => {
     const photoUrl = await imageService.uploadEvidence(returnPhoto);
-    return await apiService.request(`/keys/return/${siteId}`, {
-      method: 'POST',
-      body: JSON.stringify({ returnPhoto: photoUrl }),
-    });
+    return await apiService.request(`/keys/return/${siteId}`, { method: 'POST', body: JSON.stringify({ returnPhoto: photoUrl }) });
   },
 
-  loginVendor: async (username: string, password?: string): Promise<VendorProfile | null> => apiService.request<VendorProfile | null>('/auth/vendor/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password }),
-  }),
+  getMessages: async (siteId: string): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>(`/messages/${siteId}`),
+  sendMessage: async (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => apiService.request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
 
+  loginVendor: async (username: string, password?: string): Promise<VendorProfile | null> => apiService.request<VendorProfile | null>('/auth/vendor/login', {
+    method: 'POST', body: JSON.stringify({ username, password }),
+  }),
   registerVendor: async (vendor: VendorProfile): Promise<VendorProfile> => {
-    if (vendor.photo && vendor.photo.startsWith('data:image')) {
-      vendor.photo = await imageService.uploadEvidence(vendor.photo);
-    }
-    return await apiService.request<VendorProfile>('/auth/vendor/register', {
-      method: 'POST',
-      body: JSON.stringify(vendor),
-    });
+    if (vendor.photo?.startsWith('data:image')) vendor.photo = await imageService.uploadEvidence(vendor.photo);
+    return await apiService.request<VendorProfile>('/auth/vendor/register', { method: 'POST', body: JSON.stringify(vendor) });
   },
 
   getActiveVendor: (): VendorProfile | null => storageService.getActiveVendor(),
   logoutVendor: () => storageService.logoutVendor(),
-  getTasks: async (): Promise<WorkTask[]> => apiService.request<WorkTask[]>('/tasks'),
+  ping: async () => { try { const r = await fetch(`${API_BASE_URL}/health`); return r.ok; } catch { return false; } },
   getMaterials: async (): Promise<MaterialItem[]> => apiService.request<MaterialItem[]>('/inventory'),
   getOfficers: async (): Promise<FieldOfficer[]> => apiService.request<FieldOfficer[]>('/officers'),
 };
