@@ -1,7 +1,7 @@
 
 import { MaterialItem, WorkTask, FieldOfficer, WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
 import { imageService } from './imageService';
-import { storageService } from './storageService';
+import { storageService } from '../services/storageService';
 
 const REMOTE_URL = 'https://fieldops-backend-4i46.onrender.com/api';
 const LOCAL_URL = 'http://localhost:10000/api';
@@ -149,11 +149,11 @@ export const apiService = {
     body: JSON.stringify(visitor),
   }),
 
-  checkOutVendor: async (siteId: string, exitPhoto: string, rocLogoutData: { name: string, time: string }) => {
+  checkOutVendor: async (siteId: string, exitPhoto: string, logoutDetails: Partial<SiteVisitor>) => {
     const photoUrl = await imageService.uploadEvidence(exitPhoto);
     return await apiService.request(`/access/checkout/${siteId}`, {
       method: 'POST',
-      body: JSON.stringify({ exitPhoto: photoUrl, ...rocLogoutData }),
+      body: JSON.stringify({ exitPhoto: photoUrl, ...logoutDetails }),
     });
   },
 
