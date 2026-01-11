@@ -58,6 +58,8 @@ export interface KeyLog {
   borrowerContact: string;
   vendor: string;
   reason: string;
+  rawaNumber?: string;
+  releasedBy?: string;
   borrowTime: string;
   borrowPhoto: string;
   returnTime?: string;
