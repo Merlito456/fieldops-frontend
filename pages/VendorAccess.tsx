@@ -31,7 +31,9 @@ import {
   RefreshCw,
   Flag,
   Upload,
-  Lock
+  Lock,
+  ChevronRight,
+  AlertTriangle
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
@@ -290,6 +292,36 @@ const VendorAccess: React.FC = () => {
     setActiveModal('Disclaimer');
   };
 
+  const handleLogoutProtocolSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedSite || !capturedPhoto) return notify('Exit evidence required', 'error');
+    const f = new FormData(e.currentTarget);
+    setIsSubmitting(true);
+    try {
+      await apiService.checkOutVendor(selectedSite.id, capturedPhoto, {
+        name: f.get('rocName') as string,
+        time: f.get('rocTime') as string
+      });
+      notify('Operation logged out successfully', 'success');
+      closeModals();
+      loadInitialData();
+    } catch (err) { notify('Checkout failed', 'error'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleKeyReturnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedSite || !capturedPhoto) return notify('Return evidence required', 'error');
+    setIsSubmitting(true);
+    try {
+      await apiService.returnKey(selectedSite.id, capturedPhoto);
+      notify('Key returned to vault', 'success');
+      closeModals();
+      loadInitialData();
+    } catch (err) { notify('Return failed', 'error'); }
+    finally { setIsSubmitting(false); }
+  };
+
   const finalizeRequest = async () => {
     if (!selectedSite || !activeVendor) return;
     setIsSubmitting(true);
@@ -510,6 +542,96 @@ const VendorAccess: React.FC = () => {
                  </div>
                  <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Transmit to FO</button>
               </form>
+           </div>
+        </div>
+      )}
+
+      {activeModal === 'KeyBorrow' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">Key Request Protocol</h2>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+              </div>
+              <form onSubmit={handleKeyBorrowSubmit} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Vault Location Proof</p></div>}
+                 </div>
+                 <div className="space-y-4">
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason for Borrowing</label><input name="reason" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-amber-500 outline-none" placeholder="e.g. Cabinet Access" /></div>
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Request Key Release</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {activeModal === 'LogoutProtocol' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">Exit Protocol</h2>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+              </div>
+              <form onSubmit={handleLogoutProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture "Site Restored" Evidence</p></div>}
+                 </div>
+                 <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logout Lead</label><input name="rocName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-rose-500 outline-none" /></div>
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logout Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-rose-500 outline-none" /></div>
+                    </div>
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-rose-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Terminate Session</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {activeModal === 'KeyReturn' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">Return Protocol</h2>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+              </div>
+              <form onSubmit={handleKeyReturnSubmit} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Key Back in Vault</p></div>}
+                 </div>
+                 <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 text-center space-y-3">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Site: {selectedSite.name}</p>
+                   <p className="text-xs font-bold text-slate-900">Ensure the vault is physically locked before submission.</p>
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Complete Key Return</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {activeModal === 'Disclaimer' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
+           <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300 border-2 border-blue-100">
+              <div className="text-center space-y-4">
+                 <div className="h-20 w-20 bg-blue-50 text-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-xl shadow-blue-500/10"><ShieldCheck size={40} /></div>
+                 <h2 className="text-3xl font-black uppercase tracking-tighter">Confirm Transmission</h2>
+              </div>
+              <div className="space-y-4 text-center">
+                 <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                   I hereby confirm that all forensic evidence provided is accurate and that I am currently physically present at the asset location.
+                 </p>
+                 <div className="p-4 bg-slate-50 rounded-2xl flex items-center space-x-3 text-left">
+                   <AlertTriangle className="text-amber-500 shrink-0" size={20} />
+                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-normal">Operational liability is transferred upon FO authorization.</p>
+                 </div>
+              </div>
+              <div className="flex flex-col space-y-3">
+                 <button onClick={finalizeRequest} disabled={isSubmitting} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center space-x-2">
+                   {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> <span>Digitally Sign & Send</span></>}
+                 </button>
+                 <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Back to Protocol</button>
+              </div>
            </div>
         </div>
       )}
