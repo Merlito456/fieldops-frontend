@@ -208,8 +208,8 @@ const VendorAccess: React.FC = () => {
     const f = new FormData(e.currentTarget);
     const vendor: any = {
       id: `VND-${Date.now()}`,
-      username: f.get('username') as string,
-      password: f.get('password') as string,
+      username: (f.get('username') as string).trim(),
+      password: (f.get('password') as string),
       fullName: f.get('fullName') as string,
       company: f.get('company') as string,
       contactNumber: f.get('contactNumber') as string,
@@ -224,10 +224,11 @@ const VendorAccess: React.FC = () => {
       const result = await apiService.registerVendor(vendor);
       if (result) {
         setActiveVendor(result);
+        localStorage.setItem('fo_active_vendor_id', result.id);
         closeModals();
         notify('Registration successful', 'success');
       }
-    } catch (err) { notify('Registration failed', 'error'); }
+    } catch (err: any) { notify(err.message || 'Registration failed', 'error'); }
     finally { setIsSubmitting(false); }
   };
 
@@ -245,13 +246,14 @@ const VendorAccess: React.FC = () => {
       const result = await apiService.loginVendor(username, password);
       if (result && result.id) {
         setActiveVendor(result);
+        localStorage.setItem('fo_active_vendor_id', result.id);
         closeModals();
         notify('Access granted', 'success');
       } else { 
         notify('Invalid username or password', 'error'); 
       }
-    } catch (err) { 
-      notify('Authentication node failure', 'error'); 
+    } catch (err: any) { 
+      notify(err.message || 'Authentication failed', 'error'); 
     } finally { 
       setIsSubmitting(false); 
     }
