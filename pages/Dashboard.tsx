@@ -53,7 +53,6 @@ const Dashboard: React.FC = () => {
 
   const handleSendChat = async () => {
     if (!chatInput.trim() || !activeChatSiteId) return;
-    const site = sites.find(s => s.id === activeChatSiteId);
     const msg = { siteId: activeChatSiteId, senderId: 'FO-001', senderName: 'FO ENG', role: 'FO' as const, content: chatInput };
     setChatInput('');
     await apiService.sendMessage(msg);
@@ -111,7 +110,7 @@ const Dashboard: React.FC = () => {
                    <div className="flex items-center gap-6">
                       {s.pendingVisitor?.photo ? <img src={s.pendingVisitor.photo} onClick={() => setFullScreenImage(s.pendingVisitor?.photo || null)} className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in shadow-xl" /> : <div className="h-24 w-24 rounded-3xl bg-slate-200 flex items-center justify-center text-slate-400"><User size={32} /></div>}
                       <div className="flex-1">
-                        <p className="text-xs font-black text-blue-600 uppercase mb-1">{s.pendingVisitor?.rawaNumber || 'NO_RAWA'}</p>
+                        <p className="text-xs font-black text-blue-600 uppercase mb-1">{s.pendingVisitor?.raawaNumber || 'NO_RAAWA'}</p>
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <div className="flex gap-2 mt-3"><span className="text-[8px] font-black uppercase px-2 py-1 bg-white rounded border">{s.pendingVisitor?.vendor}</span><button onClick={() => setActiveChatSiteId(s.id)} className="text-[8px] font-black uppercase px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1"><MessageSquare size={10} /> Message</button></div>
                       </div>
@@ -124,7 +123,7 @@ const Dashboard: React.FC = () => {
                    <div className="flex items-center gap-6">
                       <img src={s.pendingKeyLog?.borrowPhoto} onClick={() => setFullScreenImage(s.pendingKeyLog?.borrowPhoto || null)} className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in shadow-xl" />
                       <div className="flex-1">
-                        <p className="text-xs font-black text-amber-600 uppercase mb-1">{s.pendingKeyLog?.rawaNumber || 'NO_RAWA'}</p>
+                        <p className="text-xs font-black text-amber-600 uppercase mb-1">{s.pendingKeyLog?.raawaNumber || 'NO_RAAWA'}</p>
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <p className="text-[9px] font-bold text-amber-500 uppercase mt-2 italic">Release: {s.pendingKeyLog?.releasedBy}</p>
                       </div>
@@ -159,7 +158,7 @@ const Dashboard: React.FC = () => {
                    <div className="h-px bg-slate-200"></div>
                    <div className="flex justify-between items-center text-[10px] font-black uppercase">
                       <div className="flex items-center gap-1.5"><Tower size={12} className="text-blue-600" /><span>{s.name}</span></div>
-                      <div className="flex items-center gap-1 text-slate-400"><Clock size={12} /><span>{s.currentVisitor?.rawaNumber}</span></div>
+                      <div className="flex items-center gap-1 text-slate-400"><Clock size={12} /><span>{s.currentVisitor?.raawaNumber}</span></div>
                    </div>
                 </div>
               ))}
