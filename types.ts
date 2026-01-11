@@ -28,6 +28,10 @@ export interface SiteVisitor {
   personnel: string[];
   vendor: string;
   activity: string;
+  rawaNumber?: string;
+  checkedBy?: string;
+  startTime?: string;
+  expectedEndTime?: string;
   photo?: string;
   exitPhoto?: string;
   rocLogged: boolean;
@@ -77,7 +81,6 @@ export interface WorkSite {
   gpsCoordinates: string; // Gps
   caretaker: string; // Caretaker
   caretakerContact: string; // Caretaker no.
-  // Operational Status (Required for Dashboard logic)
   keyStatus: 'Available' | 'Borrowed';
   currentKeyLog?: KeyLog;
   pendingKeyLog?: KeyLog;
@@ -87,7 +90,6 @@ export interface WorkSite {
   pendingVisitor?: SiteVisitor;
   accessAuthorized?: boolean;
   visitorHistory?: SiteVisitor[];
-  // Added optional property to resolve TS errors in constants.tsx and logicEngine.ts
   nextMaintenanceDate?: string;
 }
 
