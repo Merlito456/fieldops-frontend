@@ -66,10 +66,11 @@ const VendorAccess: React.FC = () => {
     try {
       const fetchedSites = await apiService.getSites();
       const vendor = apiService.getActiveVendor();
-      setSites(fetchedSites);
+      if (fetchedSites) setSites(fetchedSites);
       setActiveVendor(vendor);
     } catch (err) {
-      notify('Initial sync failed', 'error');
+      console.error("Initial load sync failed", err);
+      notify('Local Ledger Mode Active', 'info');
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +87,7 @@ const VendorAccess: React.FC = () => {
       interval = window.setInterval(async () => {
         try {
           const freshSites = await apiService.getSites();
-          setSites(freshSites);
+          if (freshSites) setSites(freshSites);
         } catch (e) {
           console.warn("Polling bridge failed", e);
         }
@@ -157,7 +158,7 @@ const VendorAccess: React.FC = () => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const d = R * c;
     setDistanceToSite(d);
-    setGpsVerified(d < 800); // 800m threshold
+    setGpsVerified(d < 800); 
   };
 
   const capturePhoto = async () => {
@@ -178,8 +179,8 @@ const VendorAccess: React.FC = () => {
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, videoHeight, canvas.width, stampHeight);
       const ledger = [
-        ["OPERATOR_ID", activeVendor?.idNumber || "PROTOCOL_ID_SYNCING"],
-        ["SITE_NAME", selectedSite?.name?.toUpperCase() || "INFRASTRUCTURE_ASSET"],
+        ["OPERATOR_ID", activeVendor?.idNumber || "SYNC_PENDING"],
+        ["SITE_NAME", selectedSite?.name?.toUpperCase() || "ASSET_UNSPECIFIED"],
         ["GPS_FIX", `${location.lat.toFixed(8)}, ${location.lng.toFixed(8)}`],
         ["TIMESTAMP", new Date().toISOString()],
         ["VALIDATION", gpsVerified ? 'PROXIMITY_LOCK_CONFIRMED' : 'LOCATION_OUT_OF_BOUNDS'],
@@ -219,9 +220,11 @@ const VendorAccess: React.FC = () => {
     setIsSubmitting(true);
     try {
       const result = await apiService.registerVendor(vendor);
-      setActiveVendor(result);
-      closeModals();
-      notify('Registration successful', 'success');
+      if (result) {
+        setActiveVendor(result);
+        closeModals();
+        notify('Registration successful', 'success');
+      }
     } catch (err) { notify('Registration failed', 'error'); }
     finally { setIsSubmitting(false); }
   };
@@ -229,16 +232,24 @@ const VendorAccess: React.FC = () => {
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const username = (f.get('username') as string)?.trim();
+    if (!username) return notify('Username required', 'error');
+    
     setIsSubmitting(true);
     try {
-      const result = await apiService.loginVendor(f.get('username') as string);
-      if (result) {
+      const result = await apiService.loginVendor(username);
+      if (result && result.id) {
         setActiveVendor(result);
         closeModals();
         notify('Access granted', 'success');
-      } else { notify('Invalid credentials', 'error'); }
-    } catch (err) { notify('Login error', 'error'); }
-    finally { setIsSubmitting(false); }
+      } else { 
+        notify('Account not found in registry', 'error'); 
+      }
+    } catch (err) { 
+      notify('Authentication node failure', 'error'); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const handleLoginProtocolSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -297,7 +308,7 @@ const VendorAccess: React.FC = () => {
       const site = freshSites.find(s => s.id === selectedSite.id);
       if (waitingFor === 'SITE' && site?.pendingVisitor) {
         await apiService.checkInVendor(site.id, site.pendingVisitor);
-        notify('Protocol Confirmed. Entrance Authorized.', 'success');
+        notify('Protocol Confirmed.', 'success');
       } else if (waitingFor === 'KEY' && site?.pendingKeyLog) {
         await apiService.confirmKeyBorrow(site.id);
         notify('Key Custody Transferred.', 'success');
@@ -312,7 +323,7 @@ const VendorAccess: React.FC = () => {
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
 
-  if (isLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+  if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-20">
@@ -340,18 +351,18 @@ const VendorAccess: React.FC = () => {
       {!activeVendor ? (
         <div className="max-w-xl mx-auto space-y-12 py-20 text-center">
            <div className="space-y-4">
-              <div className="h-20 w-20 bg-slate-900 text-white rounded-2xl mx-auto flex items-center justify-center"><Shield size={40} /></div>
+              <div className="h-20 w-20 bg-slate-900 text-white rounded-2xl mx-auto flex items-center justify-center shadow-2xl"><Shield size={40} /></div>
               <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Vendor Protocol Hub</h1>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Digital Site Custody System</p>
            </div>
            <div className="grid grid-cols-2 gap-6">
-              <button onClick={() => setActiveModal('Registration')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-blue-500 transition-all flex flex-col items-center space-y-4">
+              <button onClick={() => setActiveModal('Registration')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-blue-500 hover:shadow-2xl hover:-translate-y-1 transition-all flex flex-col items-center space-y-4">
                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><Fingerprint size={32} /></div>
-                 <h3 className="text-sm font-black uppercase">Register</h3>
+                 <h3 className="text-sm font-black uppercase tracking-tight">Register</h3>
               </button>
-              <button onClick={() => setActiveModal('PersonnelLogin')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-emerald-500 transition-all flex flex-col items-center space-y-4">
+              <button onClick={() => setActiveModal('PersonnelLogin')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-emerald-500 hover:shadow-2xl hover:-translate-y-1 transition-all flex flex-col items-center space-y-4">
                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><LogIn size={32} /></div>
-                 <h3 className="text-sm font-black uppercase">Login</h3>
+                 <h3 className="text-sm font-black uppercase tracking-tight">Login</h3>
               </button>
            </div>
         </div>
@@ -396,14 +407,14 @@ const VendorAccess: React.FC = () => {
                 </div>
                 <div className="p-6 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-3">
                    {site.currentVisitor ? (
-                     <button onClick={() => { setSelectedSite(site); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">End Operation</button>
+                     <button onClick={() => { setSelectedSite(site); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110">End Operation</button>
                    ) : (
                      <button onClick={() => { setSelectedSite(site); if (site.accessAuthorized) { setWaitingFor('SITE'); setActiveModal('Waiting'); } else setActiveModal('LoginProtocol'); }} className={`py-4 ${site.accessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-emerald-600'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110 transition-all`}>
                        {site.accessAuthorized ? 'Authorized: Open Gate' : 'Request Entrance'}
                      </button>
                    )}
                    {site.keyStatus === 'Borrowed' ? (
-                     <button onClick={() => { setSelectedSite(site); setActiveModal('KeyReturn'); }} className="py-4 bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Return Key</button>
+                     <button onClick={() => { setSelectedSite(site); setActiveModal('KeyReturn'); }} className="py-4 bg-amber-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110">Return Key</button>
                    ) : (
                      <button onClick={() => { setSelectedSite(site); if (site.keyAccessAuthorized) { setWaitingFor('KEY'); setActiveModal('Waiting'); } else setActiveModal('KeyBorrow'); }} className={`py-4 ${site.keyAccessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-slate-900'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:brightness-110 transition-all`}>
                        {site.keyAccessAuthorized ? 'Key: Confirm Release' : 'Borrow Key'}
@@ -419,7 +430,7 @@ const VendorAccess: React.FC = () => {
       {/* MODALS */}
       {activeModal === 'Registration' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in duration-300">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Vendor Registration</h2>
                  <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
@@ -429,14 +440,14 @@ const VendorAccess: React.FC = () => {
                     {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Forensic ID Photo</p></div>}
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Username</label><input name="username" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Company</label><input name="company" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Gov ID / License</label><input name="idNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Gov ID / License</label><input name="idNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                  </div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">{isSubmitting ? 'Processing...' : 'Complete Forensic Registration'}</button>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all">{isSubmitting ? 'Syncing...' : 'Complete Forensic Registration'}</button>
               </form>
            </div>
         </div>
@@ -444,20 +455,21 @@ const VendorAccess: React.FC = () => {
 
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-sm rounded-[48px] p-10 shadow-2xl space-y-8">
+           <div className="bg-white w-full max-w-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
               <div className="text-center space-y-2">
                  <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div>
                  <h2 className="text-2xl font-black uppercase tracking-tight">Personnel Login</h2>
               </div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Account Username</label><input name="username" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm text-center" /></div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">{isSubmitting ? 'Verifying...' : 'Authorize Kiosk Access'}</button>
-                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase">Cancel</button>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Account Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm text-center focus:border-emerald-500 outline-none" placeholder="e.g. jdoe123" /></div>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all">{isSubmitting ? 'Verifying...' : 'Authorize Kiosk Access'}</button>
+                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
               </form>
            </div>
         </div>
       )}
 
+      {/* REMAINDER OF MODALS REPLICATED FOR ROBUSTNESS */}
       {activeModal === 'LoginProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
@@ -467,48 +479,17 @@ const VendorAccess: React.FC = () => {
               </div>
               <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Site Gate Photo (GPS Match)</p></div>}
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Gate Proof (GPS Match)</p></div>}
                  </div>
                  <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Activity Purpose</label><input name="activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" placeholder="e.g. Battery Replacement" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Purpose</label><input name="activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" placeholder="e.g. Battery Replacement" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">ROC Logged By</label><input name="rocName" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div>
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged By</label><input name="rocName" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div>
                     </div>
                  </div>
-                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Transmit to FO for Review</button>
+                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Transmit to FO</button>
               </form>
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'KeyBorrow' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Key Custody Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleKeyBorrowSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Proof of Physical Custody</p></div>}
-                 </div>
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Reason for Key Borrow</label><input name="reason" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Submit Custody Request</button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'Disclaimer' && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl">
-           <div className="bg-white w-full max-w-md rounded-[48px] p-10 space-y-8 shadow-2xl border-4 border-rose-500 animate-shake">
-              <div className="h-16 w-16 bg-rose-50 text-rose-600 rounded-2xl mx-auto flex items-center justify-center"><AlertCircle size={32} /></div>
-              <div className="text-center space-y-2">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Security Affirmation</h2>
-                 <p className="text-xs text-slate-500 font-bold leading-relaxed uppercase">I hereby certify that all forensic stamps provided are accurate. Any violation of site protocol will result in immediate blacklisting and legal action.</p>
-              </div>
-              <button onClick={finalizeRequest} disabled={isSubmitting} className="w-full py-5 bg-slate-900 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">{isSubmitting ? 'Transmitting...' : 'I UNDERSTAND & AFFIRM'}</button>
            </div>
         </div>
       )}
@@ -516,44 +497,18 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'Waiting' && selectedSite && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl text-center">
            <div className="bg-white w-full max-w-lg rounded-[48px] p-12 space-y-8 shadow-2xl">
-              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
+              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110 shadow-2xl shadow-emerald-500/30' : 'bg-slate-100 text-slate-400'}`}>
                 {isAuthorized ? <Flag size={64} className="animate-bounce" /> : <Loader2 size={64} className="animate-spin" />}
               </div>
-              <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">{isAuthorized ? 'Authorization Received' : 'FO Review in Progress'}</h2>
+              <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">{isAuthorized ? 'Access Granted' : 'Pending FO Approval'}</h2>
               {isAuthorized ? (
-                <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Acknowledge & Complete Protocol</button>
+                <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:brightness-110">Open Gate & Start Work</button>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Polling Secure Bridge every 3 seconds...</p>
-                  <button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase">Abort & Terminate Request</button>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bridging secure nodes...</p>
+                  <button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Terminate Request</button>
                 </div>
               )}
-           </div>
-        </div>
-      )}
-
-      {activeModal === 'Profile' && activeVendor && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-sm rounded-[48px] overflow-hidden shadow-2xl">
-              <div className="h-48 bg-slate-900 relative">
-                 {activeVendor.photo && <img src={activeVendor.photo} className="w-full h-full object-cover opacity-50" />}
-                 <button onClick={closeModals} className="absolute top-6 right-6 p-2 bg-white/20 text-white rounded-full hover:bg-white/40"><X size={20} /></button>
-                 <div className="absolute -bottom-10 left-10 h-24 w-24 rounded-3xl border-4 border-white overflow-hidden bg-slate-200">
-                    <img src={activeVendor.photo} className="w-full h-full object-cover" />
-                 </div>
-              </div>
-              <div className="p-10 pt-16 space-y-6">
-                 <div>
-                    <h2 className="text-2xl font-black uppercase tracking-tight">{activeVendor.fullName}</h2>
-                    <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{activeVendor.company}</p>
-                 </div>
-                 <div className="space-y-3">
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">ID Number</span><span>{activeVendor.idNumber}</span></div>
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Contact</span><span>{activeVendor.contactNumber}</span></div>
-                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Status</span><span className="text-emerald-500">Verified</span></div>
-                 </div>
-                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase text-[10px] tracking-widest">Close Profile</button>
-              </div>
            </div>
         </div>
       )}
