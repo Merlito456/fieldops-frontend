@@ -5,13 +5,7 @@ import {
   CheckSquare, 
   MapPin, 
   Package, 
-  FileText, 
   Settings,
-  Activity,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  ScanEye,
   History
 } from 'lucide-react';
 import { FieldOfficer, WorkSite, MaterialItem, WorkTask, DashboardStats } from './types';
@@ -31,7 +25,7 @@ export const MOCK_OFFICERS: FieldOfficer[] = [
     name: 'Engr. John Carlo Rabanes, ECE', 
     employeeId: 'ECE-2024', 
     department: 'Technical', 
-    contactNumber: '+63-XXX-XXXX', 
+    contactNumber: '+63-917-XXX-XXXX', 
     email: 'jcr.rabanes@engr.com', 
     vehicleNumber: 'ENG-001', 
     isActive: true, 
@@ -45,48 +39,27 @@ export const MOCK_SITES: WorkSite[] = [
   { 
     id: 'MNL-001', 
     name: 'Makati Central Macro', 
-    type: 'Macro Cell', 
+    type: 'Outdoor', 
     address: 'Ayala Ave, Makati City', 
-    priority: 'Critical', 
-    lastMaintenanceDate: '2024-02-15', 
-    nextMaintenanceDate: '2024-05-15',
-    towerHeight: 45,
-    towerType: 'Monopole',
-    equipmentBrand: 'Ericsson',
-    signalIntegrity: 98,
-    sectors: 3,
-    keyStatus: 'Available'
+    gpsCoordinates: '14.5547, 121.0244',
+    caretaker: 'Mang Juan',
+    caretakerContact: '09123456789',
+    keyStatus: 'Available',
+    // Added mock maintenance date
+    nextMaintenanceDate: '2025-04-15'
   },
   { 
     id: 'MNL-002', 
     name: 'BGC North Relay', 
-    type: 'Micro Cell', 
+    type: 'Indoor', 
     address: '32nd St, BGC, Taguig', 
-    priority: 'High', 
-    lastMaintenanceDate: '2024-03-01', 
-    nextMaintenanceDate: '2024-06-01',
-    towerHeight: 15,
-    towerType: 'Rooftop',
-    equipmentBrand: 'Huawei',
-    signalIntegrity: 92,
-    sectors: 2,
-    keyStatus: 'Available'
-  },
-  { 
-    id: 'QC-042', 
-    name: 'Commonwealth Lattice Node', 
-    type: 'Macro Cell', 
-    address: 'Commonwealth Ave, Quezon City', 
-    priority: 'Medium', 
-    lastMaintenanceDate: '2024-01-20', 
-    nextMaintenanceDate: '2024-04-20',
-    towerHeight: 60,
-    towerType: 'Lattice',
-    equipmentBrand: 'Nokia',
-    signalIntegrity: 88,
-    sectors: 4,
-    keyStatus: 'Available'
-  },
+    gpsCoordinates: '14.5500, 121.0500',
+    caretaker: 'Alice Cruz',
+    caretakerContact: '09987654321',
+    keyStatus: 'Available',
+    // Added mock maintenance date
+    nextMaintenanceDate: '2025-04-20'
+  }
 ];
 
 export const MOCK_MATERIALS: MaterialItem[] = [
@@ -96,8 +69,7 @@ export const MOCK_MATERIALS: MaterialItem[] = [
 ];
 
 export const MOCK_TASKS: WorkTask[] = [
-  { id: 'TSK-2024', title: 'Network Rack Migration', description: 'Migrate core switch to new server rack at Metro Data Center', siteId: 'MNL-001', assignedTo: 'FO-JCR', status: 'In Progress', priority: 'High', type: 'Installation', scheduledDate: '2024-03-22', estimatedHours: 6, createdAt: '2024-03-20', updatedAt: '2024-03-21', materialsRequired: [], safetyRequirements: ['Anti-static wristband'] },
-  { id: 'TSK-2025', title: 'RF Signal Optimization', description: 'Adjust antenna tilt to improve coverage in Sector B', siteId: 'MNL-002', assignedTo: 'FO-JCR', status: 'Pending', priority: 'Medium', type: 'Maintenance', scheduledDate: '2024-03-23', estimatedHours: 3, createdAt: '2024-03-21', updatedAt: '2024-03-21', materialsRequired: [], safetyRequirements: ['Climbing Harness'] },
+  { id: 'TSK-2024', title: 'Network Rack Migration', description: 'Migrate core switch to new server rack', siteId: 'MNL-001', assignedTo: 'FO-JCR', status: 'In Progress', priority: 'High', type: 'Installation', scheduledDate: '2024-03-22', estimatedHours: 6, createdAt: '2024-03-20', updatedAt: '2024-03-21', materialsRequired: [], safetyRequirements: ['Anti-static wristband'] },
 ];
 
 export const MOCK_STATS: DashboardStats = {
@@ -108,9 +80,6 @@ export const MOCK_STATS: DashboardStats = {
   taskTrends: [
     { name: 'Mon', completed: 2, pending: 1 },
     { name: 'Tue', completed: 3, pending: 0 },
-    { name: 'Wed', completed: 1, pending: 2 },
-    { name: 'Thu', completed: 4, pending: 1 },
-    { name: 'Fri', completed: 2, pending: 0 },
   ],
   activeOfficers: MOCK_OFFICERS,
   recentTasks: MOCK_TASKS,
