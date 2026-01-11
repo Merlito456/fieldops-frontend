@@ -38,7 +38,7 @@ export interface SiteVisitor {
   personnel: string[];
   vendor: string;
   activity: string;
-  rawaNumber?: string;
+  raawaNumber?: string;
   checkedBy?: string;
   startTime?: string;
   expectedEndTime?: string;
@@ -68,7 +68,7 @@ export interface KeyLog {
   borrowerContact: string;
   vendor: string;
   reason: string;
-  rawaNumber?: string;
+  raawaNumber?: string;
   releasedBy?: string;
   borrowTime: string;
   borrowPhoto: string;
