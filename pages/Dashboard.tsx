@@ -35,7 +35,6 @@ import {
   ArrowUpRight,
   Lock,
   Unlock,
-  // Added Info to fix 'Cannot find name Info' error
   Info
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
@@ -167,11 +166,17 @@ const Dashboard: React.FC = () => {
               {pendingAccess.map(site => (
                 <div key={`acc-${site.id}`} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row items-center gap-6 group hover:bg-white hover:border-blue-200 transition-all">
                    <div className="relative shrink-0">
-                      <img 
-                        src={site.pendingVisitor?.photo} 
-                        className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
-                        onClick={() => setFullScreenImage(site.pendingVisitor?.photo || null)} 
-                      />
+                      {site.pendingVisitor?.photo ? (
+                        <img 
+                          src={site.pendingVisitor.photo} 
+                          className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
+                          onClick={() => setFullScreenImage(site.pendingVisitor?.photo || null)} 
+                        />
+                      ) : (
+                        <div className="h-24 w-24 rounded-3xl bg-slate-200 flex items-center justify-center text-slate-400 border-2 border-dashed border-slate-300">
+                          <User size={32} />
+                        </div>
+                      )}
                       <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2 rounded-xl shadow-lg"><Camera size={12} /></div>
                    </div>
                    <div className="flex-1 space-y-2 text-center md:text-left">
@@ -192,11 +197,17 @@ const Dashboard: React.FC = () => {
               {pendingKeys.map(site => (
                 <div key={`key-${site.id}`} className="bg-amber-50/50 p-6 rounded-[32px] border border-amber-100 flex flex-col md:flex-row items-center gap-6 group hover:bg-white hover:border-amber-300 transition-all">
                    <div className="relative shrink-0">
-                      <img 
-                        src={site.pendingKeyLog?.borrowPhoto} 
-                        className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
-                        onClick={() => setFullScreenImage(site.pendingKeyLog?.borrowPhoto || null)} 
-                      />
+                      {site.pendingKeyLog?.borrowPhoto ? (
+                        <img 
+                          src={site.pendingKeyLog.borrowPhoto} 
+                          className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
+                          onClick={() => setFullScreenImage(site.pendingKeyLog?.borrowPhoto || null)} 
+                        />
+                      ) : (
+                        <div className="h-24 w-24 rounded-3xl bg-amber-100 flex items-center justify-center text-amber-300 border-2 border-dashed border-amber-200">
+                          <Key size={32} />
+                        </div>
+                      )}
                       <div className="absolute -bottom-2 -right-2 bg-amber-500 text-white p-2 rounded-xl shadow-lg"><Key size={12} /></div>
                    </div>
                    <div className="flex-1 space-y-2 text-center md:text-left">
@@ -243,7 +254,13 @@ const Dashboard: React.FC = () => {
                         <div key={site.id} className="bg-slate-50/50 border border-slate-100 p-6 rounded-[32px] flex flex-col space-y-4 hover:shadow-xl transition-all hover:bg-white hover:border-blue-100 group">
                            <div className="flex items-start justify-between">
                               <div className="flex items-center space-x-3">
-                                 <img src={site.currentVisitor?.photo} className="h-12 w-12 rounded-xl object-cover ring-2 ring-white shadow-md" />
+                                 {site.currentVisitor?.photo ? (
+                                   <img src={site.currentVisitor.photo} className="h-12 w-12 rounded-xl object-cover ring-2 ring-white shadow-md cursor-zoom-in" onClick={() => setFullScreenImage(site.currentVisitor?.photo || null)} />
+                                 ) : (
+                                   <div className="h-12 w-12 rounded-xl bg-slate-200 flex items-center justify-center text-slate-400 ring-2 ring-white shadow-md">
+                                     <User size={16} />
+                                   </div>
+                                 )}
                                  <div>
                                     <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{site.currentVisitor?.leadName}</h4>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase">{site.currentVisitor?.vendor}</p>
@@ -303,11 +320,17 @@ const Dashboard: React.FC = () => {
                        {activeKeyBorrows.length > 0 ? activeKeyBorrows.map(site => (
                          <tr key={`live-key-${site.id}`} className="hover:bg-slate-50/50 transition-colors">
                             <td className="px-8 py-6">
-                               <img 
-                                 src={site.currentKeyLog?.borrowPhoto} 
-                                 className="h-10 w-14 rounded-lg object-cover cursor-zoom-in border border-slate-200" 
-                                 onClick={() => setFullScreenImage(site.currentKeyLog?.borrowPhoto || null)} 
-                               />
+                               {site.currentKeyLog?.borrowPhoto ? (
+                                 <img 
+                                   src={site.currentKeyLog.borrowPhoto} 
+                                   className="h-10 w-14 rounded-lg object-cover cursor-zoom-in border border-slate-200 shadow-sm" 
+                                   onClick={() => setFullScreenImage(site.currentKeyLog?.borrowPhoto || null)} 
+                                 />
+                               ) : (
+                                 <div className="h-10 w-14 rounded-lg bg-amber-50 flex items-center justify-center text-amber-200 border border-amber-100">
+                                   <Key size={14} />
+                                 </div>
+                               )}
                             </td>
                             <td className="px-8 py-6">
                                <p className="text-xs font-black text-slate-900 uppercase leading-none">{site.currentKeyLog?.borrowerName}</p>
@@ -320,7 +343,7 @@ const Dashboard: React.FC = () => {
                                <span className="text-[10px] font-black text-amber-600 uppercase">{formatUptime(site.currentKeyLog?.borrowTime || '')}</span>
                             </td>
                             <td className="px-8 py-6 text-right">
-                               <button className="p-2 text-slate-300 hover:text-blue-600"><Eye size={16} /></button>
+                               <button className="p-2 text-slate-300 hover:text-blue-600" onClick={() => setFullScreenImage(site.currentKeyLog?.borrowPhoto || null)}><Eye size={16} /></button>
                             </td>
                          </tr>
                        )) : (
