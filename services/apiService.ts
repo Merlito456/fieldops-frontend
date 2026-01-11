@@ -3,17 +3,15 @@ import { MaterialItem, WorkTask, FieldOfficer, WorkSite, SiteVisitor, KeyLog, Ve
 import { imageService } from './imageService';
 import { storageService } from './storageService';
 
-/**
- * FIELDOPS PRO: API BRIDGE
- * Points to your Render backend: https://fieldops-backend-4i46.onrender.com
- */
-const RENDER_URL = 'https://fieldops-backend-4i46.onrender.com/api';
-// @ts-ignore
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || RENDER_URL;
+const REMOTE_URL = 'https://fieldops-backend-4i46.onrender.com/api';
+const LOCAL_URL = 'http://localhost:10000/api';
+
+// Simple heuristic to determine if we should use local or remote
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = isLocalhost ? LOCAL_URL : REMOTE_URL;
 
 export const apiService = {
   
-  // Track connection state globally for the UI badge
   isOffline: false,
 
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -35,62 +33,28 @@ export const apiService = {
       return await response.json();
     } catch (error: any) {
       this.isOffline = true;
-      console.group(`🔴 API BRIDGE FAILURE: ${endpoint}`);
-      console.error(`Reason: ${error.message}`);
-      console.warn('Action: Falling back to Local Ledger (Browser Storage)');
-      console.groupEnd();
+      console.warn(`API Connection Failed at ${API_BASE_URL}. Falling back to Local Ledger.`);
       
+      // Fallback logic for Local Ledger mode
       const method = options?.method || 'GET';
       const body = options?.body ? JSON.parse(options.body as string) : null;
 
-      // AUTHENTICATION FALLBACK
-      if (endpoint.includes('/auth/vendor')) {
-        if (endpoint.includes('register')) return storageService.registerVendor(body) as any;
-        if (endpoint.includes('login')) return storageService.loginVendor(body.username, body.password) as any;
-      }
-
-      // ASSET MANAGEMENT FALLBACK
       if (endpoint.startsWith('/sites')) {
         if (method === 'POST') return storageService.addSite(body) as any;
         if (method === 'PUT') return storageService.updateSite(body) as any;
         return storageService.getSites() as any;
       }
-
-      // ACCESS LOGS FALLBACK
-      if (endpoint.startsWith('/access')) {
-        const parts = endpoint.split('/');
-        const siteId = parts.pop();
-        if (endpoint.includes('request')) return storageService.requestAccess(body.siteId, body) as any;
-        if (endpoint.includes('authorize')) return storageService.authorizeAccess(siteId!) as any;
-        if (endpoint.includes('cancel')) return storageService.cancelAccessRequest(siteId!) as any;
-        if (endpoint.includes('checkin')) return storageService.checkInVendor(siteId!, body) as any;
-        if (endpoint.includes('checkout')) return storageService.checkOutVendor(siteId!, body.exitPhoto, body) as any;
+      if (endpoint.startsWith('/tasks')) {
+        return storageService.getTasks() as any;
       }
-
-      // KEY LOGS FALLBACK
-      if (endpoint.startsWith('/keys')) {
-        const parts = endpoint.split('/');
-        const siteId = parts.pop();
-        if (endpoint.includes('request')) return storageService.requestKeyBorrow(body.siteId, body) as any;
-        if (endpoint.includes('authorize')) return storageService.authorizeKeyBorrow(siteId!) as any;
-        if (endpoint.includes('cancel')) return storageService.cancelKeyBorrowRequest(siteId!) as any;
-        if (endpoint.includes('confirm')) return storageService.confirmKeyBorrow(siteId!) as any;
-        if (endpoint.includes('return')) return storageService.returnKey(siteId!, body.returnPhoto) as any;
-      }
-
-      // GENERIC GETTERS
-      if (endpoint.startsWith('/tasks')) return storageService.getTasks() as any;
-      if (endpoint.startsWith('/inventory')) return storageService.getMaterials() as any;
-      if (endpoint.startsWith('/officers')) return storageService.getOfficers() as any;
-
       return [] as any;
     }
   },
 
   ping: async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`);
-      return res.ok;
+      const res = await fetch(`${API_BASE_URL}/health`).catch(() => null);
+      return !!res?.ok;
     } catch {
       return false;
     }
@@ -99,9 +63,6 @@ export const apiService = {
   getSites: async (): Promise<WorkSite[]> => apiService.request<WorkSite[]>('/sites'),
 
   addSite: async (site: WorkSite): Promise<WorkSite> => {
-    if (site.assetPhoto && site.assetPhoto.startsWith('data:image')) {
-      site.assetPhoto = await imageService.uploadEvidence(site.assetPhoto);
-    }
     return await apiService.request<WorkSite>('/sites', {
       method: 'POST',
       body: JSON.stringify(site),
@@ -109,9 +70,6 @@ export const apiService = {
   },
 
   updateSite: async (site: WorkSite): Promise<WorkSite> => {
-    if (site.assetPhoto && site.assetPhoto.startsWith('data:image')) {
-      site.assetPhoto = await imageService.uploadEvidence(site.assetPhoto);
-    }
     return await apiService.request<WorkSite>(`/sites/${site.id}`, {
       method: 'PUT',
       body: JSON.stringify(site),
@@ -131,9 +89,7 @@ export const apiService = {
   },
 
   authorizeAccess: async (siteId: string) => apiService.request(`/access/authorize/${siteId}`, { method: 'POST' }),
-
   cancelAccessRequest: async (siteId: string) => apiService.request(`/access/cancel/${siteId}`, { method: 'POST' }),
-
   checkInVendor: async (siteId: string, visitor: SiteVisitor) => apiService.request(`/access/checkin/${siteId}`, {
     method: 'POST',
     body: JSON.stringify(visitor),
@@ -157,9 +113,7 @@ export const apiService = {
   },
 
   authorizeKeyBorrow: async (siteId: string) => apiService.request(`/keys/authorize/${siteId}`, { method: 'POST' }),
-
   cancelKeyBorrowRequest: async (siteId: string) => apiService.request(`/keys/cancel/${siteId}`, { method: 'POST' }),
-
   confirmKeyBorrow: async (siteId: string) => apiService.request(`/keys/confirm/${siteId}`, { method: 'POST' }),
 
   returnKey: async (siteId: string, returnPhoto: string) => {
