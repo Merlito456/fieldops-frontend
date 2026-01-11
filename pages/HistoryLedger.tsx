@@ -23,7 +23,8 @@ import {
   AlertTriangle,
   Hash,
   ShieldAlert,
-  HardHat
+  HardHat,
+  Cpu
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { apiService } from '../services/apiService';
@@ -41,11 +42,8 @@ const HistoryLedger: React.FC = () => {
   const loadData = async () => {
     try {
       const data = await apiService.getSites();
-      if (Array.isArray(data)) {
-        setSites(data);
-      }
+      if (Array.isArray(data)) setSites(data);
     } catch (err) {
-      console.error("Ledger Fetch Error:", err);
       const localData = storageService.getSites();
       setSites(localData || []);
     } finally {
@@ -59,314 +57,99 @@ const HistoryLedger: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Aggregation Logic with Robust Null Checks
   const allVisitorHistory = sites.flatMap(s => 
     (s?.visitorHistory || []).map(v => ({ 
       ...v, 
       siteName: s?.name || 'Unknown Site', 
       siteId: s?.id || 'N/A' 
     }))
-  ).sort((a, b) => {
-    const timeA = a.checkOutTime ? new Date(a.checkOutTime).getTime() : 0;
-    const timeB = b.checkOutTime ? new Date(b.checkOutTime).getTime() : 0;
-    return timeB - timeA;
-  });
+  ).sort((a, b) => new Date(b.checkOutTime || 0).getTime() - new Date(a.checkOutTime || 0).getTime());
 
   const allKeyHistory = sites.flatMap(s => 
     (s?.keyHistory || []).map(k => ({ 
       ...k, 
       siteName: s?.name || 'Unknown Site' 
     }))
-  ).sort((a, b) => {
-    const timeA = a.returnTime ? new Date(a.returnTime).getTime() : 0;
-    const timeB = b.returnTime ? new Date(b.returnTime).getTime() : 0;
-    return timeB - timeA;
-  });
+  ).sort((a, b) => new Date(b.returnTime || 0).getTime() - new Date(a.returnTime || 0).getTime());
 
   const filteredVisitors = allVisitorHistory.filter(v => {
     const query = searchQuery.toLowerCase();
-    const leadMatch = v.leadName?.toLowerCase().includes(query);
-    const vendorMatch = v.vendor?.toLowerCase().includes(query);
-    const siteMatch = v.siteName?.toLowerCase().includes(query);
-    const rawaMatch = v.rawaNumber?.toLowerCase().includes(query);
-    const personnelMatch = Array.isArray(v.personnel) && v.personnel.some(p => p?.toLowerCase().includes(query));
-    return leadMatch || vendorMatch || siteMatch || rawaMatch || personnelMatch;
+    return v.leadName?.toLowerCase().includes(query) || 
+           v.vendor?.toLowerCase().includes(query) || 
+           v.raawaNumber?.toLowerCase().includes(query) || 
+           v.siteName?.toLowerCase().includes(query);
   });
 
   const filteredKeys = allKeyHistory.filter(k => {
     const query = searchQuery.toLowerCase();
-    return k.borrowerName?.toLowerCase().includes(query) ||
-           k.vendor?.toLowerCase().includes(query) ||
-           k.rawaNumber?.toLowerCase().includes(query) ||
+    return k.borrowerName?.toLowerCase().includes(query) || 
+           k.raawaNumber?.toLowerCase().includes(query) || 
            k.siteName?.toLowerCase().includes(query);
   });
-
-  const handleExport = () => {
-    notify(`Exporting ${activeTab === 'VISITORS' ? 'Access' : 'Key'} Ledger...`, 'info');
-    setTimeout(() => notify('Ledger exported successfully', 'success'), 1500);
-  };
 
   const safeFormatDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return 'Invalid Date';
-      return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-    } catch {
-      return 'Format Error';
-    }
+      return new Date(dateStr).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return 'Invalid'; }
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center space-y-4">
-        <Loader2 size={48} className="text-blue-600 animate-spin" />
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recovering Operational Logs...</p>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="h-full flex flex-col items-center justify-center space-y-4"><Loader2 size={48} className="text-blue-600 animate-spin" /><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Recovering Ledger Data...</p></div>;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
-      {/* Full Screen Image Viewer */}
       {fullScreenImage && (
-        <div 
-          className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-10"
-          onClick={() => setFullScreenImage(null)}
-        >
-          <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center">
-            <button className="absolute top-0 right-0 p-4 text-white hover:text-rose-400"><X size={32} /></button>
-            <img src={fullScreenImage} className="max-w-full max-h-full rounded-[40px] shadow-2xl border-4 border-white/10 object-contain" />
-          </div>
+        <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-10" onClick={() => setFullScreenImage(null)}>
+          <button className="absolute top-0 right-0 p-4 text-white"><X size={32} /></button>
+          <img src={fullScreenImage} className="max-w-full max-h-full rounded-[40px] shadow-2xl object-contain" />
         </div>
       )}
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Operational Ledger</h1>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Forensic Site Entry & Key Custody Records</p>
-        </div>
-        <div className="flex items-center space-x-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-80">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
-            <input 
-              type="text" 
-              placeholder="SEARCH AUDIT LOGS..."
-              className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-900 uppercase tracking-tight focus:ring-4 focus:ring-blue-500/10 outline-none placeholder:text-slate-200"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <button 
-            onClick={handleExport}
-            className="p-3.5 bg-white border border-slate-200 text-slate-900 rounded-2xl hover:bg-slate-50 shadow-sm transition-all"
-          >
-            <Download size={20} />
-          </button>
+        <div><h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Operational Ledger</h1><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Audit-ready Forensic Records</p></div>
+        <div className="relative w-full md:w-80">
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+          <input type="text" placeholder="SEARCH AUDIT LOGS..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-black uppercase tracking-tight outline-none focus:ring-4 focus:ring-blue-500/10" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex bg-slate-100 p-1.5 rounded-[28px] w-full max-w-md mx-auto sm:mx-0">
-        <button 
-          onClick={() => setActiveTab('VISITORS')}
-          className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'VISITORS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          <UserCheck size={16} />
-          <span>Vendor Access</span>
-        </button>
-        <button 
-          onClick={() => setActiveTab('KEYS')}
-          className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'KEYS' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-        >
-          <Key size={16} />
-          <span>Key History</span>
-        </button>
+        <button onClick={() => setActiveTab('VISITORS')} className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'VISITORS' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><UserCheck size={16} /><span>Vendor Access</span></button>
+        <button onClick={() => setActiveTab('KEYS')} className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-[22px] text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'KEYS' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400'}`}><Key size={16} /><span>Key History</span></button>
       </div>
 
       <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
         {activeTab === 'VISITORS' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Evidence</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">RAWA & Lead</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Node</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Compliance Logs</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">NOC Registry</th>
-                </tr>
-              </thead>
+              <thead><tr className="bg-slate-50/50 border-b border-slate-100"><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Evidence</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">RAAWA & Lead</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Node Info</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Compliance</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">NOC Registry</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredVisitors.length > 0 ? filteredVisitors.map((visit) => (
-                  <tr key={visit.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-3">
-                        {visit.photo ? (
-                          <div 
-                            onClick={() => setFullScreenImage(visit.photo || null)}
-                            className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-zoom-in relative group"
-                          >
-                            <img src={visit.photo} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
-                          </div>
-                        ) : (
-                          <div className="h-12 w-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 border-2 border-dashed border-slate-100"><Camera size={16} /></div>
-                        )}
-                        {visit.exitPhoto && (
-                          <div 
-                            onClick={() => setFullScreenImage(visit.exitPhoto || null)}
-                            className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-zoom-in relative group"
-                          >
-                            <img src={visit.exitPhoto} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-rose-600/0 group-hover:bg-rose-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-2 text-blue-600 mb-1">
-                        <Hash size={12} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">{visit.rawaNumber || 'NO_RAWA'}</span>
-                      </div>
-                      <p className="text-sm font-black text-slate-900 uppercase leading-none">{visit.leadName || 'Unnamed Lead'}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{visit.vendor || 'Independent'}</p>
-                      {Array.isArray(visit.personnel) && visit.personnel.length > 1 && (
-                         <div className="mt-2 flex items-center space-x-1.5">
-                            <Users size={10} className="text-slate-400" />
-                            <span className="text-[9px] font-black text-slate-500 uppercase">+{visit.personnel.length - 1} STAFF</span>
-                         </div>
-                      )}
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-2">
-                        <MapPin size={12} className="text-slate-400" />
-                        <span className="text-xs font-black text-slate-700 uppercase">{visit.siteName}</span>
-                      </div>
-                      <p className="text-[9px] font-mono text-slate-400 mt-1">{visit.siteId}</p>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex flex-col space-y-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <Terminal size={10} className="text-blue-600" />
-                            <span className="text-[10px] font-black text-slate-900 uppercase">ROC IN: {visit.rocName || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock size={10} className="text-slate-400" />
-                            <span className="text-[9px] font-bold text-slate-500 uppercase">{safeFormatDate(visit.rocTime)}</span>
-                          </div>
-                        </div>
-                        {visit.rocLogoutName && (
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <LogOut size={10} className="text-rose-600" />
-                              <span className="text-[10px] font-black text-slate-900 uppercase">ROC OUT: {visit.rocLogoutName}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Clock size={10} className="text-slate-400" />
-                              <span className="text-[9px] font-bold text-slate-500 uppercase">{safeFormatDate(visit.rocLogoutTime)}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                       {visit.nocLogged ? (
-                         <div className="space-y-2">
-                            <div className="space-y-1 border-l-2 border-blue-500 pl-3">
-                                <p className="text-[9px] font-black text-blue-600 uppercase">NOC LOGIN: {visit.nocLoginName}</p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase">{safeFormatDate(visit.nocLoginTime)}</p>
-                            </div>
-                            {visit.nocLogoutName && (
-                                <div className="space-y-1 border-l-2 border-rose-500 pl-3">
-                                    <p className="text-[9px] font-black text-rose-600 uppercase">NOC LOGOUT: {visit.nocLogoutName}</p>
-                                    <p className="text-[8px] font-bold text-slate-400 uppercase">{safeFormatDate(visit.nocLogoutTime)}</p>
-                                </div>
-                            )}
-                         </div>
-                       ) : (
-                         <div className="flex items-center space-x-2 text-slate-300">
-                            <ShieldAlert size={12} />
-                            <span className="text-[9px] font-black uppercase">Standard Access</span>
-                         </div>
-                       )}
-                    </td>
+                {filteredVisitors.map((visit) => (
+                  <tr key={visit.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-8 py-6"><div className="flex items-center space-x-2">{visit.photo && <img src={visit.photo} onClick={() => setFullScreenImage(visit.photo!)} className="h-10 w-10 rounded-lg object-cover cursor-zoom-in" />}{visit.exitPhoto && <img src={visit.exitPhoto} onClick={() => setFullScreenImage(visit.exitPhoto!)} className="h-10 w-10 rounded-lg object-cover cursor-zoom-in" />}</div></td>
+                    <td className="px-8 py-6"><div className="flex items-center space-x-1.5 text-blue-600 mb-1"><Hash size={10} /><span className="text-[10px] font-black uppercase">{visit.raawaNumber || 'NO_RAAWA'}</span></div><p className="text-sm font-black text-slate-900 uppercase">{visit.leadName}</p><p className="text-[9px] font-bold text-slate-400 uppercase">{visit.vendor}</p></td>
+                    <td className="px-8 py-6"><p className="text-xs font-black text-slate-700 uppercase">{visit.siteName}</p><p className="text-[9px] font-mono text-slate-400">{visit.siteId}</p></td>
+                    <td className="px-8 py-6"><div className="space-y-2"><div className="space-y-0.5"><p className="text-[10px] font-black text-blue-600 uppercase">IN: {visit.rocName}</p><p className="text-[8px] font-bold text-slate-400">{safeFormatDate(visit.rocTime)}</p></div>{visit.rocLogoutName && <div className="space-y-0.5 border-t border-slate-50 pt-1"><p className="text-[10px] font-black text-rose-600 uppercase">OUT: {visit.rocLogoutName}</p><p className="text-[8px] font-bold text-slate-400">{safeFormatDate(visit.rocLogoutTime)}</p></div>}</div></td>
+                    <td className="px-8 py-6">{visit.nocLogged ? <div className="space-y-1"><p className="text-[9px] font-black text-emerald-600 uppercase">Verified: {visit.nocLoginName}</p><p className="text-[8px] font-bold text-slate-400 uppercase italic">Referenced MOP Doc</p></div> : <span className="text-[9px] font-black text-slate-300 uppercase">Standard Ops</span>}</td>
                   </tr>
-                )) : (
-                  <tr><td colSpan={5} className="p-20 text-center"><p className="text-sm font-black text-slate-300 uppercase tracking-widest">No access logs recovered</p></td></tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Evidence Stamping</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">RAWA & Borrower</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Node</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Release Info</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                </tr>
-              </thead>
+              <thead><tr className="bg-slate-50/50 border-b border-slate-100"><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Stamp</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">RAAWA & Borrower</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Node</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Released By</th><th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase">Status</th></tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredKeys.length > 0 ? filteredKeys.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-3">
-                        <div 
-                          onClick={() => setFullScreenImage(log.borrowPhoto || null)}
-                          className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-amber-200 cursor-zoom-in relative group"
-                        >
-                          <img src={log.borrowPhoto} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-amber-600/0 group-hover:bg-amber-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
-                        </div>
-                        {log.returnPhoto && (
-                          <div 
-                            onClick={() => setFullScreenImage(log.returnPhoto || null)}
-                            className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-zoom-in relative group"
-                          >
-                            <img src={log.returnPhoto} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-emerald-600/0 group-hover:bg-emerald-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-2 text-amber-600 mb-1">
-                        <Hash size={12} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">{log.rawaNumber || 'NO_RAWA'}</span>
-                      </div>
-                      <p className="text-sm font-black text-slate-900 uppercase">{log.borrowerName || 'Unknown'}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{log.vendor || 'N/A'}</p>
-                      <p className="text-[8px] font-bold text-blue-500 uppercase mt-1 italic">Purpose: {log.reason}</p>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-2">
-                        <Key size={12} className="text-amber-500" />
-                        <span className="text-xs font-black text-slate-700 uppercase">{log.siteName}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                       <div className="space-y-1">
-                          <p className="text-[10px] font-black text-slate-500 uppercase">RELEASED BY: {log.releasedBy || 'AUTO_VAULT'}</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase">TIME: {safeFormatDate(log.borrowTime)}</p>
-                          {log.returnTime && <p className="text-[9px] font-black text-emerald-600 uppercase mt-2">RESTORED: {safeFormatDate(log.returnTime)}</p>}
-                       </div>
-                    </td>
-                    <td className="px-8 py-6">
-                       {log.returnTime ? (
-                         <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase rounded-lg border border-emerald-200">Vaulted</span>
-                       ) : (
-                         <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[9px] font-black uppercase rounded-lg border border-amber-200 animate-pulse">In Custody</span>
-                       )}
-                    </td>
+                {filteredKeys.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-8 py-6"><img src={log.borrowPhoto} onClick={() => setFullScreenImage(log.borrowPhoto)} className="h-10 w-14 rounded-lg object-cover cursor-zoom-in" /></td>
+                    <td className="px-8 py-6"><div className="flex items-center space-x-1.5 text-amber-600 mb-1"><Hash size={10} /><span className="text-[10px] font-black uppercase">{log.raawaNumber || 'NO_RAAWA'}</span></div><p className="text-sm font-black text-slate-900 uppercase">{log.borrowerName}</p><p className="text-[9px] font-bold text-slate-400 uppercase">Reason: {log.reason}</p></td>
+                    <td className="px-8 py-6"><p className="text-xs font-black text-slate-700 uppercase">{log.siteName}</p></td>
+                    <td className="px-8 py-6"><div className="space-y-1"><p className="text-[10px] font-black text-slate-500 uppercase">{log.releasedBy || 'SYSTEM'}</p><p className="text-[9px] font-bold text-slate-400">{safeFormatDate(log.borrowTime)}</p></div></td>
+                    <td className="px-8 py-6">{log.returnTime ? <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase rounded-lg">Restored</span> : <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[9px] font-black uppercase rounded-lg animate-pulse">In Custody</span>}</td>
                   </tr>
-                )) : (
-                  <tr><td colSpan={5} className="p-20 text-center"><p className="text-sm font-black text-slate-300 uppercase tracking-widest">No key logs recovered</p></td></tr>
-                )}
+                ))}
               </tbody>
             </table>
           </div>
