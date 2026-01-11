@@ -30,7 +30,8 @@ import {
   PhoneCall,
   RefreshCw,
   Flag,
-  Upload
+  Upload,
+  Lock
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
@@ -69,7 +70,7 @@ const VendorAccess: React.FC = () => {
       if (fetchedSites) setSites(fetchedSites);
       setActiveVendor(vendor);
     } catch (err) {
-      console.error("Initial load sync failed", err);
+      console.warn("Initial load sync failed", err);
       notify('Local Ledger Mode Active', 'info');
     } finally {
       setIsLoading(false);
@@ -208,6 +209,7 @@ const VendorAccess: React.FC = () => {
     const vendor: any = {
       id: `VND-${Date.now()}`,
       username: f.get('username') as string,
+      password: f.get('password') as string,
       fullName: f.get('fullName') as string,
       company: f.get('company') as string,
       contactNumber: f.get('contactNumber') as string,
@@ -233,17 +235,20 @@ const VendorAccess: React.FC = () => {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const username = (f.get('username') as string)?.trim();
+    const password = f.get('password') as string;
+    
     if (!username) return notify('Username required', 'error');
+    if (!password) return notify('Password required', 'error');
     
     setIsSubmitting(true);
     try {
-      const result = await apiService.loginVendor(username);
+      const result = await apiService.loginVendor(username, password);
       if (result && result.id) {
         setActiveVendor(result);
         closeModals();
         notify('Access granted', 'success');
       } else { 
-        notify('Account not found in registry', 'error'); 
+        notify('Invalid username or password', 'error'); 
       }
     } catch (err) { 
       notify('Authentication node failure', 'error'); 
@@ -437,15 +442,16 @@ const VendorAccess: React.FC = () => {
               </div>
               <form onSubmit={handleRegisterSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Forensic ID Photo</p></div>}
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Forensic ID Photo</p></div>}
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Gov ID / License</label><input name="idNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                    <div className="space-y-1 md:col-span-2"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Specialization</label><input name="specialization" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
                  </div>
                  <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all">{isSubmitting ? 'Syncing...' : 'Complete Forensic Registration'}</button>
               </form>
@@ -461,7 +467,20 @@ const VendorAccess: React.FC = () => {
                  <h2 className="text-2xl font-black uppercase tracking-tight">Personnel Login</h2>
               </div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Account Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm text-center focus:border-emerald-500 outline-none" placeholder="e.g. jdoe123" /></div>
+                 <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Account Username</label>
+                    <div className="relative">
+                       <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                       <input name="username" required className="w-full p-4 pl-12 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-emerald-500 outline-none" placeholder="Username" />
+                    </div>
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Secure Password</label>
+                    <div className="relative">
+                       <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                       <input name="password" type="password" required className="w-full p-4 pl-12 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-emerald-500 outline-none" placeholder="Password" />
+                    </div>
+                 </div>
                  <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-emerald-700 transition-all">{isSubmitting ? 'Verifying...' : 'Authorize Kiosk Access'}</button>
                  <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
               </form>
@@ -469,7 +488,6 @@ const VendorAccess: React.FC = () => {
         </div>
       )}
 
-      {/* REMAINDER OF MODALS REPLICATED FOR ROBUSTNESS */}
       {activeModal === 'LoginProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
@@ -479,13 +497,13 @@ const VendorAccess: React.FC = () => {
               </div>
               <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Gate Proof (GPS Match)</p></div>}
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Proof (GPS Match)</p></div>}
                  </div>
                  <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Purpose</label><input name="activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" placeholder="e.g. Battery Replacement" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Purpose</label><input name="activity" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" placeholder="e.g. Battery Replacement" /></div>
                     <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged By</label><input name="rocName" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-sm" /></div>
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div>
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged By</label><input name="rocName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
+                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" /></div>
                     </div>
                  </div>
                  <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Transmit to FO</button>
@@ -496,8 +514,8 @@ const VendorAccess: React.FC = () => {
 
       {activeModal === 'Waiting' && selectedSite && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl text-center">
-           <div className="bg-white w-full max-w-lg rounded-[48px] p-12 space-y-8 shadow-2xl">
-              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110 shadow-2xl shadow-emerald-500/30' : 'bg-slate-100 text-slate-400'}`}>
+           <div className="bg-white w-full max-w-lg rounded-[48px] p-12 space-y-8 shadow-2xl animate-in fade-in duration-300">
+              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110 shadow-emerald-500/20 shadow-2xl' : 'bg-slate-100 text-slate-400'}`}>
                 {isAuthorized ? <Flag size={64} className="animate-bounce" /> : <Loader2 size={64} className="animate-spin" />}
               </div>
               <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">{isAuthorized ? 'Access Granted' : 'Pending FO Approval'}</h2>
@@ -505,10 +523,36 @@ const VendorAccess: React.FC = () => {
                 <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:brightness-110">Open Gate & Start Work</button>
               ) : (
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bridging secure nodes...</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Polling secure connection every 3s...</p>
                   <button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Terminate Request</button>
                 </div>
               )}
+           </div>
+        </div>
+      )}
+
+      {activeModal === 'Profile' && activeVendor && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-sm rounded-[48px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
+              <div className="h-48 bg-slate-900 relative">
+                 {activeVendor.photo && <img src={activeVendor.photo} className="w-full h-full object-cover opacity-50" />}
+                 <button onClick={closeModals} className="absolute top-6 right-6 p-2 bg-white/20 text-white rounded-full hover:bg-white/40"><X size={20} /></button>
+                 <div className="absolute -bottom-10 left-10 h-24 w-24 rounded-3xl border-4 border-white overflow-hidden bg-slate-200">
+                    <img src={activeVendor.photo} className="w-full h-full object-cover" />
+                 </div>
+              </div>
+              <div className="p-10 pt-16 space-y-6">
+                 <div>
+                    <h2 className="text-2xl font-black uppercase tracking-tight">{activeVendor.fullName}</h2>
+                    <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">{activeVendor.company}</p>
+                 </div>
+                 <div className="space-y-3">
+                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">ID Number</span><span>{activeVendor.idNumber}</span></div>
+                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Contact</span><span>{activeVendor.contactNumber}</span></div>
+                    <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Status</span><span className="text-emerald-500">Verified</span></div>
+                 </div>
+                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase text-[10px] tracking-widest">Close Profile</button>
+              </div>
            </div>
         </div>
       )}
