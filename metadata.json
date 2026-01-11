@@ -1,0 +1,8 @@
+{
+  "name": "Copy of FieldOps Pro: FO Work Management",
+  "description": "A comprehensive field operations platform for managing tasks, site visits, inventory, and field officer performance with integrated AI insights.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
