@@ -20,6 +20,16 @@ export interface VendorProfile {
   createdAt: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  siteId: string;
+  senderId: string;
+  senderName: string;
+  role: 'VENDOR' | 'FO';
+  content: string;
+  timestamp: string;
+}
+
 export interface SiteVisitor {
   id: string;
   vendorId?: string;
@@ -81,13 +91,13 @@ export interface FieldOfficer {
 }
 
 export interface WorkSite {
-  id: string; // Site ID
-  name: string; // Sitename
-  type: SiteType; // Type
-  address: string; // Location
-  gpsCoordinates: string; // Gps
-  caretaker: string; // Caretaker
-  caretakerContact: string; // Caretaker no.
+  id: string;
+  name: string;
+  type: SiteType;
+  address: string;
+  gpsCoordinates: string;
+  caretaker: string;
+  caretakerContact: string;
   keyStatus: 'Available' | 'Borrowed';
   currentKeyLog?: KeyLog;
   pendingKeyLog?: KeyLog;
