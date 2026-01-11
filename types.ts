@@ -40,6 +40,11 @@ export interface SiteVisitor {
   rocLogoutName?: string;
   rocLogoutTime?: string;
   nocLogged: boolean;
+  nocLoginName?: string;
+  nocLoginTime?: string;
+  nocLogoutName?: string;
+  nocLogoutTime?: string;
+  activityRemarks?: string;
   checkInTime: string;
   checkOutTime?: string;
 }
