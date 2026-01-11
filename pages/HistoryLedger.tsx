@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   History, 
@@ -18,7 +19,8 @@ import {
   Users,
   Terminal,
   LogOut,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { apiService } from '../services/apiService';
@@ -36,9 +38,13 @@ const HistoryLedger: React.FC = () => {
   const loadData = async () => {
     try {
       const data = await apiService.getSites();
-      setSites(data);
+      if (Array.isArray(data)) {
+        setSites(data);
+      }
     } catch (err) {
-      setSites(storageService.getSites());
+      console.error("Ledger Fetch Error:", err);
+      const localData = storageService.getSites();
+      setSites(localData || []);
     } finally {
       setIsLoading(false);
     }
@@ -50,31 +56,60 @@ const HistoryLedger: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Aggregation Logic
+  // Aggregation Logic with Robust Null Checks
   const allVisitorHistory = sites.flatMap(s => 
-    (s.visitorHistory || []).map(v => ({ ...v, siteName: s.name, siteId: s.id }))
-  ).sort((a, b) => new Date(b.checkOutTime || '').getTime() - new Date(a.checkOutTime || '').getTime());
+    (s?.visitorHistory || []).map(v => ({ 
+      ...v, 
+      siteName: s?.name || 'Unknown Site', 
+      siteId: s?.id || 'N/A' 
+    }))
+  ).sort((a, b) => {
+    const timeA = a.checkOutTime ? new Date(a.checkOutTime).getTime() : 0;
+    const timeB = b.checkOutTime ? new Date(b.checkOutTime).getTime() : 0;
+    return timeB - timeA;
+  });
 
   const allKeyHistory = sites.flatMap(s => 
-    (s.keyHistory || []).map(k => ({ ...k, siteName: s.name }))
-  ).sort((a, b) => new Date(b.returnTime || '').getTime() - new Date(a.returnTime || '').getTime());
+    (s?.keyHistory || []).map(k => ({ 
+      ...k, 
+      siteName: s?.name || 'Unknown Site' 
+    }))
+  ).sort((a, b) => {
+    const timeA = a.returnTime ? new Date(a.returnTime).getTime() : 0;
+    const timeB = b.returnTime ? new Date(b.returnTime).getTime() : 0;
+    return timeB - timeA;
+  });
 
-  const filteredVisitors = allVisitorHistory.filter(v => 
-    v.leadName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    v.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    v.siteName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.personnel && v.personnel.some(p => p.toLowerCase().includes(searchQuery.toLowerCase())))
-  );
+  const filteredVisitors = allVisitorHistory.filter(v => {
+    const query = searchQuery.toLowerCase();
+    const leadMatch = v.leadName?.toLowerCase().includes(query);
+    const vendorMatch = v.vendor?.toLowerCase().includes(query);
+    const siteMatch = v.siteName?.toLowerCase().includes(query);
+    const personnelMatch = Array.isArray(v.personnel) && v.personnel.some(p => p?.toLowerCase().includes(query));
+    return leadMatch || vendorMatch || siteMatch || personnelMatch;
+  });
 
-  const filteredKeys = allKeyHistory.filter(k => 
-    k.borrowerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    k.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    k.siteName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredKeys = allKeyHistory.filter(k => {
+    const query = searchQuery.toLowerCase();
+    return k.borrowerName?.toLowerCase().includes(query) ||
+           k.vendor?.toLowerCase().includes(query) ||
+           k.siteName?.toLowerCase().includes(query);
+  });
 
   const handleExport = () => {
     notify(`Exporting ${activeTab === 'VISITORS' ? 'Access' : 'Key'} Ledger...`, 'info');
     setTimeout(() => notify('Ledger exported successfully', 'success'), 1500);
+  };
+
+  const safeFormatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'Invalid Date';
+      return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+      return 'Format Error';
+    }
   };
 
   if (isLoading) {
@@ -162,13 +197,17 @@ const HistoryLedger: React.FC = () => {
                   <tr key={visit.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-8 py-6">
                       <div className="flex items-center space-x-3">
-                        <div 
-                          onClick={() => setFullScreenImage(visit.photo || null)}
-                          className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-zoom-in relative group"
-                        >
-                          <img src={visit.photo} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
-                        </div>
+                        {visit.photo ? (
+                          <div 
+                            onClick={() => setFullScreenImage(visit.photo || null)}
+                            className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 cursor-zoom-in relative group"
+                          >
+                            <img src={visit.photo} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-blue-600/0 group-hover:bg-blue-600/20 transition-all flex items-center justify-center"><Camera size={12} className="text-white opacity-0 group-hover:opacity-100" /></div>
+                          </div>
+                        ) : (
+                          <div className="h-12 w-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 border-2 border-dashed border-slate-100"><Camera size={16} /></div>
+                        )}
                         {visit.exitPhoto && (
                           <div 
                             onClick={() => setFullScreenImage(visit.exitPhoto || null)}
@@ -181,12 +220,12 @@ const HistoryLedger: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <p className="text-sm font-black text-slate-900 uppercase leading-none">{visit.leadName}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{visit.vendor}</p>
-                      {visit.personnel && visit.personnel.length > 1 && (
+                      <p className="text-sm font-black text-slate-900 uppercase leading-none">{visit.leadName || 'Unnamed Lead'}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{visit.vendor || 'Independent'}</p>
+                      {Array.isArray(visit.personnel) && visit.personnel.length > 1 && (
                          <div className="mt-2 flex items-center space-x-1.5">
                             <Users size={10} className="text-blue-500" />
-                            <span className="text-[9px] font-black text-slate-500 uppercase">+{visit.personnel.length - 1} OTHER STAFF</span>
+                            <span className="text-[9px] font-black text-slate-500 uppercase">+{visit.personnel.length - 1} STAFF</span>
                          </div>
                       )}
                     </td>
@@ -206,7 +245,7 @@ const HistoryLedger: React.FC = () => {
                           </div>
                           <div className="flex items-center space-x-2">
                             <Clock size={10} className="text-slate-400" />
-                            <span className="text-[9px] font-bold text-slate-500 uppercase">{visit.rocTime ? new Date(visit.rocTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</span>
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">{safeFormatDate(visit.rocTime)}</span>
                           </div>
                         </div>
                         {visit.rocLogoutName && (
@@ -217,17 +256,27 @@ const HistoryLedger: React.FC = () => {
                             </div>
                             <div className="flex items-center space-x-2">
                               <Clock size={10} className="text-slate-400" />
-                              <span className="text-[9px] font-bold text-slate-500 uppercase">{new Date(visit.rocLogoutTime!).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                              <span className="text-[9px] font-bold text-slate-500 uppercase">{safeFormatDate(visit.rocLogoutTime)}</span>
                             </div>
                           </div>
                         )}
                       </div>
                     </td>
                     <td className="px-8 py-6 text-right">
-                       <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-100 flex items-center justify-center w-fit">
-                         <ShieldCheck size={12} className="mr-1.5" />
-                         Forensic Seal
-                       </span>
+                       {visit.nocLogged ? (
+                         <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-blue-100 flex items-center justify-center w-fit">
+                           <ShieldCheck size={12} className="mr-1.5" />
+                           NOC Verified
+                         </span>
+                       ) : (
+                         <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-100 flex items-center justify-center w-fit">
+                           <ShieldCheck size={12} className="mr-1.5" />
+                           Forensic Seal
+                         </span>
+                       )}
+                       {visit.activityRemarks && (
+                         <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-2 truncate w-32">Note: {visit.activityRemarks}</p>
+                       )}
                     </td>
                   </tr>
                 )) : (
@@ -272,8 +321,8 @@ const HistoryLedger: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <p className="text-sm font-black text-slate-900 uppercase">{log.borrowerName}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{log.vendor}</p>
+                      <p className="text-sm font-black text-slate-900 uppercase">{log.borrowerName || 'Unknown'}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{log.vendor || 'N/A'}</p>
                       <p className="text-[9px] font-mono text-blue-500 mt-1">{log.borrowerContact}</p>
                     </td>
                     <td className="px-8 py-6">
@@ -284,8 +333,8 @@ const HistoryLedger: React.FC = () => {
                     </td>
                     <td className="px-8 py-6">
                        <div className="space-y-1">
-                          <p className="text-[10px] font-black text-slate-500 uppercase">BORROWED: {new Date(log.borrowTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
-                          {log.returnTime && <p className="text-[10px] font-black text-emerald-600 uppercase">RETURNED: {new Date(log.returnTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>}
+                          <p className="text-[10px] font-black text-slate-500 uppercase">BORROWED: {safeFormatDate(log.borrowTime)}</p>
+                          {log.returnTime && <p className="text-[10px] font-black text-emerald-600 uppercase">RETURNED: {safeFormatDate(log.returnTime)}</p>}
                        </div>
                     </td>
                     <td className="px-8 py-6">
