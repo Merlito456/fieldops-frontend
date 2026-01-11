@@ -18,44 +18,20 @@ const DEFAULT_FO_PASSWORD = 'admin123';
 
 export const storageService = {
   init: () => {
-    if (!localStorage.getItem(KEYS.MATERIALS)) {
-      localStorage.setItem(KEYS.MATERIALS, JSON.stringify(MOCK_MATERIALS));
-    }
-    if (!localStorage.getItem(KEYS.TASKS)) {
-      localStorage.setItem(KEYS.TASKS, JSON.stringify(MOCK_TASKS));
-    }
-    if (!localStorage.getItem(KEYS.OFFICERS)) {
-      localStorage.setItem(KEYS.OFFICERS, JSON.stringify(MOCK_OFFICERS));
-    }
-    if (!localStorage.getItem(KEYS.SITES)) {
-      localStorage.setItem(KEYS.SITES, JSON.stringify(MOCK_SITES));
-    }
-    if (!localStorage.getItem(KEYS.VENDORS)) {
-      localStorage.setItem(KEYS.VENDORS, JSON.stringify([]));
-    }
-    if (!localStorage.getItem(KEYS.FO_NAME)) {
-      localStorage.setItem(KEYS.FO_NAME, DEFAULT_FO_NAME);
-    }
-    if (!localStorage.getItem(KEYS.FO_PASSWORD)) {
-      localStorage.setItem(KEYS.FO_PASSWORD, DEFAULT_FO_PASSWORD);
-    }
+    if (!localStorage.getItem(KEYS.MATERIALS)) localStorage.setItem(KEYS.MATERIALS, JSON.stringify(MOCK_MATERIALS));
+    if (!localStorage.getItem(KEYS.TASKS)) localStorage.setItem(KEYS.TASKS, JSON.stringify(MOCK_TASKS));
+    if (!localStorage.getItem(KEYS.OFFICERS)) localStorage.setItem(KEYS.OFFICERS, JSON.stringify(MOCK_OFFICERS));
+    if (!localStorage.getItem(KEYS.SITES)) localStorage.setItem(KEYS.SITES, JSON.stringify(MOCK_SITES));
+    if (!localStorage.getItem(KEYS.VENDORS)) localStorage.setItem(KEYS.VENDORS, JSON.stringify([]));
+    if (!localStorage.getItem(KEYS.FO_NAME)) localStorage.setItem(KEYS.FO_NAME, DEFAULT_FO_NAME);
+    if (!localStorage.getItem(KEYS.FO_PASSWORD)) localStorage.setItem(KEYS.FO_PASSWORD, DEFAULT_FO_PASSWORD);
   },
 
-  // FO Identity Management
-  getFOName: (): string => {
-    return localStorage.getItem(KEYS.FO_NAME) || DEFAULT_FO_NAME;
-  },
-  saveFOName: (name: string) => {
-    localStorage.setItem(KEYS.FO_NAME, name);
-  },
-  getFOPassword: (): string => {
-    return localStorage.getItem(KEYS.FO_PASSWORD) || DEFAULT_FO_PASSWORD;
-  },
-  saveFOPassword: (password: string) => {
-    localStorage.setItem(KEYS.FO_PASSWORD, password);
-  },
+  getFOName: () => localStorage.getItem(KEYS.FO_NAME) || DEFAULT_FO_NAME,
+  saveFOName: (name: string) => localStorage.setItem(KEYS.FO_NAME, name),
+  getFOPassword: () => localStorage.getItem(KEYS.FO_PASSWORD) || DEFAULT_FO_PASSWORD,
+  saveFOPassword: (password: string) => localStorage.setItem(KEYS.FO_PASSWORD, password),
 
-  // Vendor Profile Methods
   registerVendor: (vendor: VendorProfile) => {
     const vendors = storageService.getVendors();
     const updated = [...vendors, vendor];
@@ -69,21 +45,14 @@ export const storageService = {
     return data ? JSON.parse(data) : [];
   },
 
-  updateVendor: (updatedVendor: VendorProfile) => {
-    const vendors = storageService.getVendors();
-    const updated = vendors.map(v => v.id === updatedVendor.id ? updatedVendor : v);
-    localStorage.setItem(KEYS.VENDORS, JSON.stringify(updated));
-    return updatedVendor;
-  },
-
-  getActiveVendor: (): VendorProfile | null => {
+  getActiveVendor: () => {
     const activeId = localStorage.getItem(KEYS.ACTIVE_VENDOR_ID);
     if (!activeId) return null;
     const vendors = storageService.getVendors();
     return vendors.find(v => v.id === activeId) || null;
   },
 
-  loginVendor: (username: string, password?: string): VendorProfile | null => {
+  loginVendor: (username: string, password?: string) => {
     const vendors = storageService.getVendors();
     const found = vendors.find(v => v.username === username && v.password === password);
     if (found) {
@@ -93,29 +62,23 @@ export const storageService = {
     return null;
   },
 
-  logoutVendor: () => {
-    localStorage.removeItem(KEYS.ACTIVE_VENDOR_ID);
-  },
+  logoutVendor: () => localStorage.removeItem(KEYS.ACTIVE_VENDOR_ID),
 
-  getMaterials: (): MaterialItem[] => {
+  getMaterials: () => {
     const data = localStorage.getItem(KEYS.MATERIALS);
     return data ? JSON.parse(data) : MOCK_MATERIALS;
   },
 
-  saveMaterials: (materials: MaterialItem[]) => {
-    localStorage.setItem(KEYS.MATERIALS, JSON.stringify(materials));
-  },
+  saveMaterials: (m: MaterialItem[]) => localStorage.setItem(KEYS.MATERIALS, JSON.stringify(m)),
 
-  getTasks: (): WorkTask[] => {
+  getTasks: () => {
     const data = localStorage.getItem(KEYS.TASKS);
     return data ? JSON.parse(data) : MOCK_TASKS;
   },
 
-  saveTasks: (tasks: WorkTask[]) => {
-    localStorage.setItem(KEYS.TASKS, JSON.stringify(tasks));
-  },
+  saveTasks: (t: WorkTask[]) => localStorage.setItem(KEYS.TASKS, JSON.stringify(t)),
 
-  getOfficers: (): FieldOfficer[] => {
+  getOfficers: () => {
     const data = localStorage.getItem(KEYS.OFFICERS);
     return data ? JSON.parse(data) : MOCK_OFFICERS;
   },
@@ -125,9 +88,7 @@ export const storageService = {
     return data ? JSON.parse(data) : MOCK_SITES;
   },
 
-  saveSites: (sites: WorkSite[]) => {
-    localStorage.setItem(KEYS.SITES, JSON.stringify(sites));
-  },
+  saveSites: (s: WorkSite[]) => localStorage.setItem(KEYS.SITES, JSON.stringify(s)),
 
   addSite: (site: WorkSite) => {
     const sites = storageService.getSites();
@@ -143,178 +104,82 @@ export const storageService = {
     return updated;
   },
 
-  deleteSite: (id: string) => {
+  requestAccess: (siteId: string, visitorData: any) => {
     const sites = storageService.getSites();
-    const updated = sites.filter(s => s.id !== id);
-    storageService.saveSites(updated);
-    return updated;
-  },
-
-  requestAccess: (siteId: string, visitorData: Omit<SiteVisitor, 'id' | 'checkInTime'>) => {
-    const sites = storageService.getSites();
-    const pendingVisitor: SiteVisitor = {
-      ...visitorData,
-      id: `REQ-${Date.now()}`,
-      checkInTime: new Date().toISOString()
-    };
-    
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, pendingVisitor, accessAuthorized: false };
-      }
-      return s;
-    });
-    
+    const pendingVisitor = { ...visitorData, id: `REQ-${Date.now()}`, checkInTime: new Date().toISOString() };
+    const updated = sites.map(s => s.id === siteId ? { ...s, pendingVisitor, accessAuthorized: false } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
   authorizeAccess: (siteId: string) => {
     const sites = storageService.getSites();
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, accessAuthorized: true };
-      }
-      return s;
-    });
+    const updated = sites.map(s => s.id === siteId ? { ...s, accessAuthorized: true } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
   cancelAccessRequest: (siteId: string) => {
     const sites = storageService.getSites();
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, pendingVisitor: undefined, accessAuthorized: false };
-      }
-      return s;
-    });
+    const updated = sites.map(s => s.id === siteId ? { ...s, pendingVisitor: undefined, accessAuthorized: false } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
-  checkInVendor: (siteId: string, visitorData: Omit<SiteVisitor, 'id' | 'checkInTime'>) => {
+  checkInVendor: (siteId: string, visitorData: any) => {
     const sites = storageService.getSites();
-    const newVisitor: SiteVisitor = {
-      ...visitorData,
-      id: `VIS-${Date.now()}`,
-      checkInTime: new Date().toISOString()
-    };
-    
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, currentVisitor: newVisitor, pendingVisitor: undefined, accessAuthorized: false };
-      }
-      return s;
-    });
-    
+    const newVisitor = { ...visitorData, id: `VIS-${Date.now()}`, checkInTime: new Date().toISOString() };
+    const updated = sites.map(s => s.id === siteId ? { ...s, currentVisitor: newVisitor, pendingVisitor: undefined, accessAuthorized: false } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
-  checkOutVendor: (siteId: string, exitPhoto: string, rocLogoutData?: { name: string, time: string }) => {
+  checkOutVendor: (siteId: string, exitPhoto: string, rocLogoutData?: any) => {
     const sites = storageService.getSites();
     const updated = sites.map(s => {
       if (s.id === siteId && s.currentVisitor) {
         const history = s.visitorHistory || [];
-        const finishedVisitor = { 
-          ...s.currentVisitor, 
-          exitPhoto, 
-          rocLogoutName: rocLogoutData?.name,
-          rocLogoutTime: rocLogoutData?.time,
-          checkOutTime: new Date().toISOString() 
-        };
-        return { 
-          ...s, 
-          currentVisitor: undefined, 
-          visitorHistory: [finishedVisitor, ...history].slice(0, 10) 
-        };
+        const finishedVisitor = { ...s.currentVisitor, exitPhoto, rocLogoutName: rocLogoutData?.name, rocLogoutTime: rocLogoutData?.time, checkOutTime: new Date().toISOString() };
+        return { ...s, currentVisitor: undefined, visitorHistory: [finishedVisitor, ...history].slice(0, 10) };
       }
       return s;
     });
-    
     storageService.saveSites(updated);
     return updated;
   },
 
-  requestKeyBorrow: (siteId: string, logData: Omit<KeyLog, 'id' | 'borrowTime'>) => {
+  requestKeyBorrow: (siteId: string, logData: any) => {
     const sites = storageService.getSites();
-    const newLog: KeyLog = {
-      ...logData,
-      id: `KEYREQ-${Date.now()}`,
-      borrowTime: new Date().toISOString()
-    };
-
-    const updated = sites.map((s): WorkSite => {
-      if (s.id === siteId) {
-        return { ...s, pendingKeyLog: newLog, keyAccessAuthorized: false };
-      }
-      return s;
-    });
-
+    const newLog = { ...logData, id: `KEYREQ-${Date.now()}`, borrowTime: new Date().toISOString() };
+    const updated = sites.map(s => s.id === siteId ? { ...s, pendingKeyLog: newLog, keyAccessAuthorized: false } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
   authorizeKeyBorrow: (siteId: string) => {
     const sites = storageService.getSites();
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, keyAccessAuthorized: true };
-      }
-      return s;
-    });
-    storageService.saveSites(updated);
-    return updated;
-  },
-
-  cancelKeyBorrowRequest: (siteId: string) => {
-    const sites = storageService.getSites();
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        return { ...s, pendingKeyLog: undefined, keyAccessAuthorized: false };
-      }
-      return s;
-    });
+    const updated = sites.map(s => s.id === siteId ? { ...s, keyAccessAuthorized: true } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
   confirmKeyBorrow: (siteId: string) => {
     const sites = storageService.getSites();
-    const updated = sites.map((s): WorkSite => {
-      if (s.id === siteId && s.pendingKeyLog) {
-        return { 
-          ...s, 
-          keyStatus: 'Borrowed' as const, 
-          currentKeyLog: { ...s.pendingKeyLog, id: `KEY-${Date.now()}` },
-          pendingKeyLog: undefined,
-          keyAccessAuthorized: false
-        };
-      }
-      return s;
-    });
-
+    const updated = sites.map(s => s.id === siteId && s.pendingKeyLog ? { ...s, keyStatus: 'Borrowed' as const, currentKeyLog: { ...s.pendingKeyLog, id: `KEY-${Date.now()}` }, pendingKeyLog: undefined, keyAccessAuthorized: false } : s);
     storageService.saveSites(updated);
     return updated;
   },
 
   returnKey: (siteId: string, returnPhoto: string) => {
     const sites = storageService.getSites();
-    const updated = sites.map((s): WorkSite => {
+    const updated = sites.map(s => {
       if (s.id === siteId && s.currentKeyLog) {
         const history = s.keyHistory || [];
         const finishedLog = { ...s.currentKeyLog, returnTime: new Date().toISOString(), returnPhoto };
-        return { 
-          ...s, 
-          keyStatus: 'Available' as const, 
-          currentKeyLog: undefined, 
-          keyHistory: [finishedLog, ...history].slice(0, 10) 
-        };
+        return { ...s, keyStatus: 'Available' as const, currentKeyLog: undefined, keyHistory: [finishedLog, ...history].slice(0, 10) };
       }
       return s;
     });
-
     storageService.saveSites(updated);
     return updated;
   }
