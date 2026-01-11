@@ -64,16 +64,19 @@ export const logicEngine = {
 
     // 4. Maintenance Forecasting
     sites.forEach(site => {
-      const nextDate = new Date(site.nextMaintenanceDate);
-      const today = new Date();
-      const diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (diffDays < 7 && diffDays > 0) {
-        insights.push({
-          type: 'EFFICIENCY',
-          message: `Maintenance window for ${site.name} opens in ${diffDays} days. Pre-allocate materials now.`,
-          severity: 'medium'
-        });
+      // Fix: Added check to ensure nextMaintenanceDate exists before parsing
+      if (site.nextMaintenanceDate) {
+        const nextDate = new Date(site.nextMaintenanceDate);
+        const today = new Date();
+        const diffDays = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays < 7 && diffDays > 0) {
+          insights.push({
+            type: 'EFFICIENCY',
+            message: `Maintenance window for ${site.name} opens in ${diffDays} days. Pre-allocate materials now.`,
+            severity: 'medium'
+          });
+        }
       }
     });
 
