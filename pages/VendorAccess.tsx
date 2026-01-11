@@ -48,7 +48,6 @@ const VendorAccess: React.FC = () => {
 
   useEffect(() => { loadInitialData(); }, []);
 
-  // Polling for FO authorization during Waiting state
   useEffect(() => {
     let interval: number | null = null;
     if (activeModal === 'Waiting' && selectedSite) {
@@ -60,7 +59,6 @@ const VendorAccess: React.FC = () => {
     return () => { if (interval) clearInterval(interval); };
   }, [activeModal, selectedSite]);
 
-  // Polling for new messages if chat is open
   useEffect(() => {
     let interval: number | null = null;
     if (showChat && selectedSite) {
@@ -120,6 +118,17 @@ const VendorAccess: React.FC = () => {
       });
       setCapturedPhoto(c.toDataURL('image/jpeg', 0.9)); setStreamActive(false);
     }
+  };
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !selectedSite || !activeVendor) return;
+    const msg = { siteId: selectedSite.id, senderId: activeVendor.id, senderName: activeVendor.fullName, role: 'VENDOR' as const, content: chatInput };
+    setChatInput('');
+    try {
+      await apiService.sendMessage(msg);
+      const msgs = await apiService.getMessages(selectedSite.id);
+      if (msgs) setChatMessages(msgs);
+    } catch (err) { notify('Message failed to send', 'error'); }
   };
 
   const startCamera = (mode: 'user' | 'environment') => {
@@ -184,17 +193,6 @@ const VendorAccess: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!chatInput.trim() || !selectedSite || !activeVendor) return;
-    const msg = { siteId: selectedSite.id, senderId: activeVendor.id, senderName: activeVendor.fullName, role: 'VENDOR' as const, content: chatInput };
-    setChatInput('');
-    try {
-      await apiService.sendMessage(msg);
-      const msgs = await apiService.getMessages(selectedSite.id);
-      if (msgs) setChatMessages(msgs);
-    } catch (err) { notify('Message failed to send', 'error'); }
-  };
-
   const finalizeRequest = async () => {
     if (!selectedSite || !activeVendor) return;
     setIsSubmitting(true);
@@ -203,7 +201,7 @@ const VendorAccess: React.FC = () => {
         await apiService.requestAccess(selectedSite.id, {
           vendorId: activeVendor.id, leadName: activeVendor.fullName, contactNumber: activeVendor.contactNumber,
           personnel: [activeVendor.fullName, ...additionalPersonnel], vendor: activeVendor.company, 
-          activity: loginFormValues.activity, rawaNumber: loginFormValues.rawaNumber, checkedBy: loginFormValues.checkedBy,
+          activity: loginFormValues.activity, raawaNumber: loginFormValues.raawaNumber, checkedBy: loginFormValues.checkedBy,
           startTime: loginFormValues.startTime, expectedEndTime: loginFormValues.expectedEndTime, photo: capturedPhoto || undefined,
           rocLogged: true, rocName: loginFormValues.rocName, rocTime: loginFormValues.rocTime, nocLogged: false
         });
@@ -367,35 +365,12 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight">Login</h2></div>
+              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">Personnel Login</h2></div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl">{isSubmitting ? 'Verifying...' : 'Authorize Access'}</button>
-                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase">Cancel</button>
-              </form>
-           </div>
-        </div>
-      )}
-
-      {/* REGISTRATION MODAL */}
-      {activeModal === 'Registration' && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Vendor Enrollment</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={handleRegisterSubmit} className="p-10 overflow-y-auto space-y-8">
-                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Forensic ID</p></div>}
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Username (Case-Insensitive)</label><input name="username" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">ID Number</label><input name="idNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
-                 </div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl">{isSubmitting ? 'Processing...' : 'Complete Enrollment'}</button>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">{isSubmitting ? 'Verifying...' : 'Authorize Access'}</button>
+                 <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
               </form>
            </div>
         </div>
@@ -406,10 +381,10 @@ const VendorAccess: React.FC = () => {
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Key Release Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Release Proof Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), rawaNumber: f.get('rawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Release Proof Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), raawaNumber: f.get('raawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => { startCamera('environment'); setWaitingFor('KEY'); }} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">{capturedPhoto && waitingFor === 'KEY' ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Proof</p></div>}</div>
                  <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">RAWA Number</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="rawaNumber" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="REF-2024-XXXX" /></div></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">RAAWA Number</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="raawaNumber" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="REF-2024-XXXX" /></div></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Reason</label><div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="reason" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Purpose of borrowing" /></div></div>
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Released By</label><div className="relative"><UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="releasedBy" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Guard or Caretaker Name" /></div></div>
                  </div>
@@ -424,38 +399,16 @@ const VendorAccess: React.FC = () => {
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('ID Photo Required', 'error'); setLoginFormValues({ activity: f.get('activity'), rawaNumber: f.get('rawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('ID Photo Required', 'error'); setLoginFormValues({ activity: f.get('activity'), raawaNumber: f.get('raawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => { startCamera('user'); setWaitingFor('SITE'); }} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">{capturedPhoto && waitingFor === 'SITE' ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Forensic ID</p></div>}</div>
                  <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-4"><h3 className="text-xs font-black uppercase text-blue-600 tracking-widest">Personnel</h3><input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase" /><button type="button" onClick={() => setAdditionalPersonnel(p => [...p, ''])} className="flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest"><PlusCircle size={14} /> Add Additional Team</button>{additionalPersonnel.map((p, i) => <div key={i} className="flex gap-2"><input value={p} onChange={e => { const updated = [...additionalPersonnel]; updated[i] = e.target.value; setAdditionalPersonnel(updated); }} className="flex-1 p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-blue-600" /><button type="button" onClick={() => setAdditionalPersonnel(prev => prev.filter((_, idx) => idx !== i))} className="text-rose-500"><MinusCircle size={20} /></button></div>)}</div>
-                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest">Task Matrix</h3><input name="activity" placeholder="Detailed Activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="rawaNumber" placeholder="RAWA Reference" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="checkedBy" placeholder="On-Site Guard Name" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /></div>
+                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest">Task Matrix</h3><input name="activity" placeholder="Detailed Activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="raawaNumber" placeholder="RAAWA Reference" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="checkedBy" placeholder="On-Site Guard Name" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /></div>
                  </div>
                  <div className="grid grid-cols-2 gap-4"><div><label className="text-[9px] font-black text-slate-400 uppercase">Start Time</label><input name="startTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Estimated Exit</label><input name="expectedEndTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div></div>
                  <div className="bg-slate-900 rounded-[32px] p-6 text-white space-y-4"><h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">ROC Compliance</h3><div className="grid grid-cols-2 gap-4"><input name="rocName" placeholder="ROC Officer" required className="w-full p-3 bg-white/5 rounded-xl text-xs uppercase" /><input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white/5 rounded-xl text-xs" /></div></div>
                  <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Confirm & Sign Transmission</button>
               </form>
-           </div>
-        </div>
-      )}
-
-      {/* WAITING MODAL */}
-      {activeModal === 'Waiting' && selectedSite && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-xl text-center">
-           <div className="bg-white w-full max-w-lg rounded-[48px] p-12 space-y-8 shadow-2xl animate-in fade-in duration-300">
-              <div className={`p-8 rounded-[40px] inline-block transition-all ${isAuthorized ? 'bg-emerald-600 text-white scale-110 shadow-2xl shadow-emerald-500/20' : 'bg-slate-100 text-slate-400'}`}>{isAuthorized ? <Check size={64} className="animate-bounce" /> : <Loader2 size={64} className="animate-spin" />}</div>
-              <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-tight">{isAuthorized ? 'Authorization Signed' : 'Awaiting FO Remote Approval'}</h2>
-              {isAuthorized ? <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Complete Protocol & Proceed</button> : <div className="space-y-4"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Digital Hub Polling every 3s...</p><button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Abort Request</button></div>}
-           </div>
-        </div>
-      )}
-
-      {/* DISCLAIMER MODAL */}
-      {activeModal === 'Disclaimer' && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md">
-           <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in">
-              <div className="text-center space-y-4"><div className="h-20 w-20 bg-blue-50 text-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-xl shadow-blue-500/10"><ShieldCheck size={40} /></div><h2 className="text-3xl font-black uppercase tracking-tighter">Sign Transmission</h2></div>
-              <div className="space-y-4 text-center"><p className="text-sm font-medium text-slate-500 leading-relaxed italic">I confirm physical presence at {selectedSite?.name} and verify that all provided forensic evidence is accurate and complete.</p><div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3 text-left"><AlertTriangle className="text-amber-500 shrink-0" size={20} /><p className="text-[9px] font-black uppercase text-slate-400 leading-tight">Operational liability and site custody transfers to vendor upon FO authorization.</p></div></div>
-              <div className="flex flex-col gap-3"><button onClick={finalizeRequest} disabled={isSubmitting} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl flex items-center justify-center gap-2 tracking-widest">{isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> Digital Signature</>}</button><button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Back to Protocol</button></div>
            </div>
         </div>
       )}
