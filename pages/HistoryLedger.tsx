@@ -20,7 +20,10 @@ import {
   Terminal,
   LogOut,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Hash,
+  ShieldAlert,
+  HardHat
 } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { apiService } from '../services/apiService';
@@ -85,14 +88,16 @@ const HistoryLedger: React.FC = () => {
     const leadMatch = v.leadName?.toLowerCase().includes(query);
     const vendorMatch = v.vendor?.toLowerCase().includes(query);
     const siteMatch = v.siteName?.toLowerCase().includes(query);
+    const rawaMatch = v.rawaNumber?.toLowerCase().includes(query);
     const personnelMatch = Array.isArray(v.personnel) && v.personnel.some(p => p?.toLowerCase().includes(query));
-    return leadMatch || vendorMatch || siteMatch || personnelMatch;
+    return leadMatch || vendorMatch || siteMatch || rawaMatch || personnelMatch;
   });
 
   const filteredKeys = allKeyHistory.filter(k => {
     const query = searchQuery.toLowerCase();
     return k.borrowerName?.toLowerCase().includes(query) ||
            k.vendor?.toLowerCase().includes(query) ||
+           k.rawaNumber?.toLowerCase().includes(query) ||
            k.siteName?.toLowerCase().includes(query);
   });
 
@@ -186,10 +191,10 @@ const HistoryLedger: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Evidence</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lead & Personnel</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">RAWA & Lead</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Node</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">ROC Details (Login/Logout)</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Compliance</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Compliance Logs</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">NOC Registry</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -220,18 +225,22 @@ const HistoryLedger: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
+                      <div className="flex items-center space-x-2 text-blue-600 mb-1">
+                        <Hash size={12} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">{visit.rawaNumber || 'NO_RAWA'}</span>
+                      </div>
                       <p className="text-sm font-black text-slate-900 uppercase leading-none">{visit.leadName || 'Unnamed Lead'}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{visit.vendor || 'Independent'}</p>
                       {Array.isArray(visit.personnel) && visit.personnel.length > 1 && (
                          <div className="mt-2 flex items-center space-x-1.5">
-                            <Users size={10} className="text-blue-500" />
+                            <Users size={10} className="text-slate-400" />
                             <span className="text-[9px] font-black text-slate-500 uppercase">+{visit.personnel.length - 1} STAFF</span>
                          </div>
                       )}
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center space-x-2">
-                        <MapPin size={12} className="text-blue-500" />
+                        <MapPin size={12} className="text-slate-400" />
                         <span className="text-xs font-black text-slate-700 uppercase">{visit.siteName}</span>
                       </div>
                       <p className="text-[9px] font-mono text-slate-400 mt-1">{visit.siteId}</p>
@@ -241,7 +250,7 @@ const HistoryLedger: React.FC = () => {
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
                             <Terminal size={10} className="text-blue-600" />
-                            <span className="text-[10px] font-black text-slate-900 uppercase">IN: {visit.rocName || 'N/A'}</span>
+                            <span className="text-[10px] font-black text-slate-900 uppercase">ROC IN: {visit.rocName || 'N/A'}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Clock size={10} className="text-slate-400" />
@@ -252,7 +261,7 @@ const HistoryLedger: React.FC = () => {
                           <div className="space-y-1">
                             <div className="flex items-center space-x-2">
                               <LogOut size={10} className="text-rose-600" />
-                              <span className="text-[10px] font-black text-slate-900 uppercase">OUT: {visit.rocLogoutName}</span>
+                              <span className="text-[10px] font-black text-slate-900 uppercase">ROC OUT: {visit.rocLogoutName}</span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Clock size={10} className="text-slate-400" />
@@ -262,20 +271,25 @@ const HistoryLedger: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-right">
+                    <td className="px-8 py-6">
                        {visit.nocLogged ? (
-                         <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-blue-100 flex items-center justify-center w-fit">
-                           <ShieldCheck size={12} className="mr-1.5" />
-                           NOC Verified
-                         </span>
+                         <div className="space-y-2">
+                            <div className="space-y-1 border-l-2 border-blue-500 pl-3">
+                                <p className="text-[9px] font-black text-blue-600 uppercase">NOC LOGIN: {visit.nocLoginName}</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">{safeFormatDate(visit.nocLoginTime)}</p>
+                            </div>
+                            {visit.nocLogoutName && (
+                                <div className="space-y-1 border-l-2 border-rose-500 pl-3">
+                                    <p className="text-[9px] font-black text-rose-600 uppercase">NOC LOGOUT: {visit.nocLogoutName}</p>
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase">{safeFormatDate(visit.nocLogoutTime)}</p>
+                                </div>
+                            )}
+                         </div>
                        ) : (
-                         <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-100 flex items-center justify-center w-fit">
-                           <ShieldCheck size={12} className="mr-1.5" />
-                           Forensic Seal
-                         </span>
-                       )}
-                       {visit.activityRemarks && (
-                         <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-2 truncate w-32">Note: {visit.activityRemarks}</p>
+                         <div className="flex items-center space-x-2 text-slate-300">
+                            <ShieldAlert size={12} />
+                            <span className="text-[9px] font-black uppercase">Standard Access</span>
+                         </div>
                        )}
                     </td>
                   </tr>
@@ -291,9 +305,9 @@ const HistoryLedger: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Evidence Stamping</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Borrower Information</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">RAWA & Borrower</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Node</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Duration</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Release Info</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                 </tr>
               </thead>
@@ -321,9 +335,13 @@ const HistoryLedger: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
+                      <div className="flex items-center space-x-2 text-amber-600 mb-1">
+                        <Hash size={12} />
+                        <span className="text-[10px] font-black uppercase tracking-widest">{log.rawaNumber || 'NO_RAWA'}</span>
+                      </div>
                       <p className="text-sm font-black text-slate-900 uppercase">{log.borrowerName || 'Unknown'}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{log.vendor || 'N/A'}</p>
-                      <p className="text-[9px] font-mono text-blue-500 mt-1">{log.borrowerContact}</p>
+                      <p className="text-[8px] font-bold text-blue-500 uppercase mt-1 italic">Purpose: {log.reason}</p>
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center space-x-2">
@@ -333,8 +351,9 @@ const HistoryLedger: React.FC = () => {
                     </td>
                     <td className="px-8 py-6">
                        <div className="space-y-1">
-                          <p className="text-[10px] font-black text-slate-500 uppercase">BORROWED: {safeFormatDate(log.borrowTime)}</p>
-                          {log.returnTime && <p className="text-[10px] font-black text-emerald-600 uppercase">RETURNED: {safeFormatDate(log.returnTime)}</p>}
+                          <p className="text-[10px] font-black text-slate-500 uppercase">RELEASED BY: {log.releasedBy || 'AUTO_VAULT'}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase">TIME: {safeFormatDate(log.borrowTime)}</p>
+                          {log.returnTime && <p className="text-[9px] font-black text-emerald-600 uppercase mt-2">RESTORED: {safeFormatDate(log.returnTime)}</p>}
                        </div>
                     </td>
                     <td className="px-8 py-6">
