@@ -1,6 +1,6 @@
 
 export type Department = 'Network' | 'Technical' | 'Sales' | 'Service';
-export type SiteType = 'Macro Cell' | 'Small Cell' | 'Micro Cell' | 'Repeater' | 'Data Center';
+export type SiteType = 'Outdoor' | 'Indoor';
 export type TaskStatus = 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type TaskType = 'Maintenance' | 'Installation' | 'Repair' | 'Inspection' | 'Audit';
@@ -9,11 +9,11 @@ export type MaterialCategory = 'Hardware' | 'Cable' | 'Tool' | 'Safety' | 'Consu
 export interface VendorProfile {
   id: string;
   username: string;
-  password?: string; // Stored in plain text for this local demo environment
+  password?: string;
   fullName: string;
   company: string;
   contactNumber: string;
-  photo?: string; // Biometric profile photo
+  photo?: string;
   idNumber: string;
   specialization: string;
   verified: boolean;
@@ -22,14 +22,14 @@ export interface VendorProfile {
 
 export interface SiteVisitor {
   id: string;
-  vendorId?: string; // Reference to registered profile
+  vendorId?: string;
   leadName: string;
   contactNumber: string;
   personnel: string[];
   vendor: string;
   activity: string;
-  photo?: string; // Base64 image
-  exitPhoto?: string; // Base64 image for logout
+  photo?: string;
+  exitPhoto?: string;
   rocLogged: boolean;
   rocName?: string;
   rocTime?: string;
@@ -70,35 +70,25 @@ export interface FieldOfficer {
 }
 
 export interface WorkSite {
-  id: string;
-  name: string;
-  type: SiteType;
-  address: string;
-  gpsCoordinates?: string;
-  priority: Priority;
-  lastMaintenanceDate: string;
-  nextMaintenanceDate: string;
-  assetPhoto?: string; // Photo taken during creation
-  // ECE Technical Specs
-  towerHeight?: number; 
-  towerType?: 'Lattice' | 'Monopole' | 'Guyed' | 'Rooftop';
-  equipmentBrand?: 'Huawei' | 'Ericsson' | 'Nokia' | 'ZTE';
-  signalIntegrity?: number; 
-  sectors?: number;
-  // Personal Management
-  caretaker?: string;
-  caretakerContact?: string;
-  // Physical Security
+  id: string; // Site ID
+  name: string; // Sitename
+  type: SiteType; // Type
+  address: string; // Location
+  gpsCoordinates: string; // Gps
+  caretaker: string; // Caretaker
+  caretakerContact: string; // Caretaker no.
+  // Operational Status (Required for Dashboard logic)
   keyStatus: 'Available' | 'Borrowed';
   currentKeyLog?: KeyLog;
   pendingKeyLog?: KeyLog;
   keyAccessAuthorized?: boolean;
   keyHistory?: KeyLog[];
-  // Visitor Tracking
   currentVisitor?: SiteVisitor;
   pendingVisitor?: SiteVisitor;
   accessAuthorized?: boolean;
   visitorHistory?: SiteVisitor[];
+  // Added optional property to resolve TS errors in constants.tsx and logicEngine.ts
+  nextMaintenanceDate?: string;
 }
 
 export interface MaterialItem {
@@ -110,7 +100,7 @@ export interface MaterialItem {
   unit: string;
   minStockLevel: number;
   currentStock: number;
-  photo?: string; // Evidence of stock entry
+  photo?: string;
 }
 
 export interface WorkTask {
