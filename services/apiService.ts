@@ -6,7 +6,6 @@ import { storageService } from './storageService';
 const REMOTE_URL = 'https://fieldops-backend-4i46.onrender.com/api';
 const LOCAL_URL = 'http://localhost:10000/api';
 
-// Simple heuristic to determine if we should use local or remote
 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const API_BASE_URL = isLocalhost ? LOCAL_URL : REMOTE_URL;
 
@@ -33,20 +32,50 @@ export const apiService = {
       return await response.json();
     } catch (error: any) {
       this.isOffline = true;
-      console.warn(`API Connection Failed at ${API_BASE_URL}. Falling back to Local Ledger.`);
+      console.warn(`API Bridge Failure. Falling back to Local Storage for ${endpoint}`);
       
-      // Fallback logic for Local Ledger mode
       const method = options?.method || 'GET';
       const body = options?.body ? JSON.parse(options.body as string) : null;
 
+      // Handle Site Routes
       if (endpoint.startsWith('/sites')) {
         if (method === 'POST') return storageService.addSite(body) as any;
         if (method === 'PUT') return storageService.updateSite(body) as any;
         return storageService.getSites() as any;
       }
-      if (endpoint.startsWith('/tasks')) {
-        return storageService.getTasks() as any;
+
+      // Handle Access Routes
+      if (endpoint.startsWith('/access/request')) return storageService.requestAccess(body.siteId, body) as any;
+      if (endpoint.startsWith('/access/authorize/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.authorizeAccess(siteId) as any;
       }
+      if (endpoint.startsWith('/access/checkin/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.checkInVendor(siteId, body) as any;
+      }
+      if (endpoint.startsWith('/access/checkout/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.checkOutVendor(siteId, body.exitPhoto, body) as any;
+      }
+
+      // Handle Key Routes
+      if (endpoint.startsWith('/keys/request')) return storageService.requestKeyBorrow(body.siteId, body) as any;
+      if (endpoint.startsWith('/keys/authorize/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.authorizeKeyBorrow(siteId) as any;
+      }
+      if (endpoint.startsWith('/keys/confirm/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.confirmKeyBorrow(siteId) as any;
+      }
+      if (endpoint.startsWith('/keys/return/')) {
+        const siteId = endpoint.split('/').pop() || '';
+        return storageService.returnKey(siteId, body.returnPhoto) as any;
+      }
+
+      if (endpoint.startsWith('/tasks')) return storageService.getTasks() as any;
+      
       return [] as any;
     }
   },
