@@ -33,7 +33,10 @@ import {
   Upload,
   Lock,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  PlusCircle,
+  MinusCircle,
+  FlipHorizontal
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { WorkSite, SiteVisitor, KeyLog, VendorProfile } from '../types';
@@ -103,7 +106,7 @@ const VendorAccess: React.FC = () => {
     let stream: MediaStream | null = null;
     if (streamActive) {
       navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }, 
+        video: { facingMode: facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }, 
         audio: false 
       })
         .then(s => {
@@ -207,6 +210,7 @@ const VendorAccess: React.FC = () => {
 
   const startCamera = (mode: 'user' | 'environment') => { setFacingMode(mode); setStreamActive(true); };
   const stopCamera = () => { setStreamActive(false); };
+  const toggleCamera = () => setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
 
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -272,6 +276,10 @@ const VendorAccess: React.FC = () => {
     const f = new FormData(e.currentTarget);
     setLoginFormValues({ 
       activity: f.get('activity'),
+      rawaNumber: f.get('rawaNumber'),
+      checkedBy: f.get('checkedBy'),
+      startTime: f.get('startTime'),
+      expectedEndTime: f.get('expectedEndTime'),
       personnel: [activeVendor?.fullName, ...additionalPersonnel],
       rocName: f.get('rocName'),
       rocTime: f.get('rocTime')
@@ -338,6 +346,10 @@ const VendorAccess: React.FC = () => {
           personnel: loginFormValues.personnel, 
           vendor: activeVendor.company, 
           activity: loginFormValues.activity as string,
+          rawaNumber: loginFormValues.rawaNumber as string,
+          checkedBy: loginFormValues.checkedBy as string,
+          startTime: loginFormValues.startTime as string,
+          expectedEndTime: loginFormValues.expectedEndTime as string,
           photo: capturedPhoto || undefined,
           rocLogged: true, 
           rocName: loginFormValues.rocName as string,
@@ -384,6 +396,14 @@ const VendorAccess: React.FC = () => {
     setAdditionalPersonnel([]); 
   };
 
+  const addPersonnelField = () => setAdditionalPersonnel([...additionalPersonnel, '']);
+  const removePersonnelField = (index: number) => setAdditionalPersonnel(additionalPersonnel.filter((_, i) => i !== index));
+  const updatePersonnelName = (index: number, name: string) => {
+    const updated = [...additionalPersonnel];
+    updated[index] = name;
+    setAdditionalPersonnel(updated);
+  };
+
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
 
@@ -398,7 +418,10 @@ const VendorAccess: React.FC = () => {
           <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8">
             <div className="flex justify-between items-start pointer-events-auto">
                <div className="w-48 h-48 bg-slate-900 rounded-3xl border border-white/15 p-1 overflow-hidden"><div ref={mapContainerRef} className="w-full h-full rounded-2xl"></div></div>
-               <button onClick={stopCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-rose-600 transition-colors"><X size={24} /></button>
+               <div className="flex space-x-2">
+                 <button onClick={toggleCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-blue-600 transition-colors"><FlipHorizontal size={24} /></button>
+                 <button onClick={stopCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-rose-600 transition-colors"><X size={24} /></button>
+               </div>
             </div>
             <div className="flex flex-col items-center space-y-6 pointer-events-auto">
                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${gpsVerified ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
@@ -492,6 +515,113 @@ const VendorAccess: React.FC = () => {
       )}
 
       {/* MODALS */}
+      {activeModal === 'LoginProtocol' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh]">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
+              </div>
+              <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
+                 {/* FORENSIC PROOF */}
+                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Full View Forensic ID</p></div>}
+                    {capturedPhoto && <div className="absolute bottom-4 right-4 bg-blue-600 text-white p-2 rounded-xl text-[8px] font-black uppercase">RE-TAKE PHOTO</div>}
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                       <h3 className="text-xs font-black uppercase tracking-widest text-blue-600">Personnel Data</h3>
+                       <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Team Leader</label>
+                          <input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase outline-none border-2 border-transparent" />
+                       </div>
+                       <div className="space-y-2">
+                          <div className="flex items-center justify-between ml-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Attending Personnel</label>
+                            <button type="button" onClick={addPersonnelField} className="text-blue-600 hover:text-blue-800"><PlusCircle size={16} /></button>
+                          </div>
+                          <input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase outline-none border-2 border-transparent" />
+                          {additionalPersonnel.map((name, idx) => (
+                            <div key={idx} className="flex items-center space-x-2">
+                               <input 
+                                 placeholder="NAME OF PERSONNEL"
+                                 value={name}
+                                 onChange={(e) => updatePersonnelName(idx, e.target.value)}
+                                 required
+                                 className="flex-1 p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" 
+                               />
+                               <button type="button" onClick={() => removePersonnelField(idx)} className="text-rose-500 hover:text-rose-700"><MinusCircle size={20} /></button>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+
+                    <div className="space-y-4">
+                       <h3 className="text-xs font-black uppercase tracking-widest text-emerald-600">Task Details</h3>
+                       <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity</label>
+                          <input name="activity" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" placeholder="e.g. Battery Replacement" />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">RAWA Number</label>
+                          <input name="rawaNumber" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" placeholder="REF-2024-XXXX" />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Checked By (Guard/Caretaker)</label>
+                          <input name="checkedBy" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-blue-500 outline-none" placeholder="Full Name" />
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Start Date/Time</label>
+                       <input name="startTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" />
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Expected End Date/Time</label>
+                       <input name="expectedEndTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" />
+                    </div>
+                 </div>
+
+                 <div className="bg-slate-900 rounded-[32px] p-6 space-y-4 text-white">
+                    <div className="flex items-center space-x-3">
+                       <History className="text-blue-500" size={20} />
+                       <h3 className="text-xs font-black uppercase tracking-widest">ROC Log-in Registry</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <label className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">ROC Name</label>
+                          <input name="rocName" required className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-bold text-xs text-white uppercase outline-none focus:border-blue-500" />
+                       </div>
+                       <div className="space-y-1">
+                          <label className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Login Timestamp</label>
+                          <input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-bold text-xs text-white uppercase outline-none focus:border-blue-500" />
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* SAFETY ALERT */}
+                 <div className="p-5 bg-rose-50 border-2 border-rose-100 rounded-3xl flex items-start space-x-3">
+                    <AlertTriangle className="text-rose-600 shrink-0 mt-1" size={20} />
+                    <div>
+                       <h4 className="text-[10px] font-black text-rose-900 uppercase tracking-widest">Operational Disruption Alert</h4>
+                       <p className="text-[9px] font-medium text-rose-700 leading-relaxed mt-1 italic">
+                         REMINDER: For highly critical activities that might cause site disruption, you MUST login to NOC and refer to your MOP document before proceeding.
+                       </p>
+                    </div>
+                 </div>
+
+                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-blue-700">Transmit to FO</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* OTHER MODALS (KEY, DISCLAIMER, ETC) REMAIN SAME BUT ENSURE THE NEW FIELDS PERSIST */}
+      {/* ... keeping the rest of the modals as they were ... */}
+      
       {activeModal === 'Registration' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in duration-300">
@@ -520,7 +650,7 @@ const VendorAccess: React.FC = () => {
 
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
               <div className="text-center space-y-2">
                  <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div>
                  <h2 className="text-2xl font-black uppercase tracking-tight">Personnel Login</h2>
@@ -547,30 +677,6 @@ const VendorAccess: React.FC = () => {
         </div>
       )}
 
-      {activeModal === 'LoginProtocol' && selectedSite && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-              <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                 <h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Proof (GPS Match)</p></div>}
-                 </div>
-                 <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Activity Purpose</label><input name="activity" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" placeholder="e.g. Battery Replacement" /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged By</label><input name="rocName" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-blue-500 outline-none" /></div>
-                       <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" /></div>
-                    </div>
-                 </div>
-                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-blue-700">Transmit to FO</button>
-              </form>
-           </div>
-        </div>
-      )}
-
       {activeModal === 'KeyBorrow' && selectedSite && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
@@ -583,7 +689,7 @@ const VendorAccess: React.FC = () => {
                     {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2 group-hover:scale-110 transition-transform"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Vault Location Proof</p></div>}
                  </div>
                  <div className="space-y-4">
-                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason for Borrowing</label><input name="reason" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-amber-500 outline-none" placeholder="e.g. Cabinet Access" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason for Borrowing</label><input name="reason" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="e.g. Cabinet Access" /></div>
                  </div>
                  <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-amber-700">Request Key Release</button>
               </form>
