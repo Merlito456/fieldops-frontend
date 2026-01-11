@@ -35,7 +35,9 @@ import {
   ArrowUpRight,
   Lock,
   Unlock,
-  Info
+  Info,
+  Hash,
+  Calendar
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import { generateTaskOptimizations } from '../services/geminiService';
@@ -121,6 +123,11 @@ const Dashboard: React.FC = () => {
     return `${hours}h ${diff % 60}m`;
   };
 
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  };
+
   if (isLoading) {
     return (
       <div className="h-full flex flex-col items-center justify-center space-y-4">
@@ -164,32 +171,53 @@ const Dashboard: React.FC = () => {
 
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {pendingAccess.map(site => (
-                <div key={`acc-${site.id}`} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row items-center gap-6 group hover:bg-white hover:border-blue-200 transition-all">
-                   <div className="relative shrink-0">
-                      {site.pendingVisitor?.photo ? (
-                        <img 
-                          src={site.pendingVisitor.photo} 
-                          className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
-                          onClick={() => setFullScreenImage(site.pendingVisitor?.photo || null)} 
-                        />
-                      ) : (
-                        <div className="h-24 w-24 rounded-3xl bg-slate-200 flex items-center justify-center text-slate-400 border-2 border-dashed border-slate-300">
-                          <User size={32} />
-                        </div>
-                      )}
-                      <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2 rounded-xl shadow-lg"><Camera size={12} /></div>
-                   </div>
-                   <div className="flex-1 space-y-2 text-center md:text-left">
-                      <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Entry Request</p>
-                      <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">{site.name}</h4>
-                      <div className="flex flex-wrap justify-center md:justify-start gap-2 pt-1">
-                         <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 bg-white rounded-lg border border-slate-200">{site.pendingVisitor?.vendor}</span>
-                         <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 bg-white rounded-lg border border-slate-200">{site.pendingVisitor?.leadName}</span>
+                <div key={`acc-${site.id}`} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 flex flex-col items-stretch gap-6 group hover:bg-white hover:border-blue-200 transition-all">
+                   <div className="flex flex-col md:flex-row items-center gap-6">
+                      <div className="relative shrink-0">
+                          {site.pendingVisitor?.photo ? (
+                            <img 
+                              src={site.pendingVisitor.photo} 
+                              className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in ring-4 ring-white shadow-xl transition-transform group-hover:scale-105" 
+                              onClick={() => setFullScreenImage(site.pendingVisitor?.photo || null)} 
+                            />
+                          ) : (
+                            <div className="h-24 w-24 rounded-3xl bg-slate-200 flex items-center justify-center text-slate-400 border-2 border-dashed border-slate-300">
+                              <User size={32} />
+                            </div>
+                          )}
+                          <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2 rounded-xl shadow-lg"><Camera size={12} /></div>
+                      </div>
+                      <div className="flex-1 space-y-2 text-center md:text-left">
+                          <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Entry Request • {site.pendingVisitor?.rawaNumber || 'NO RAWA'}</p>
+                          <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight leading-none">{site.name}</h4>
+                          <div className="flex flex-wrap justify-center md:justify-start gap-2 pt-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 bg-white rounded-lg border border-slate-200">{site.pendingVisitor?.vendor}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 bg-white rounded-lg border border-slate-200">{site.pendingVisitor?.leadName}</span>
+                          </div>
+                      </div>
+                      <div className="flex space-x-3">
+                          <button onClick={() => handleAuthorizeAccess(site.id)} className="h-14 w-14 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 hover:scale-105 transition-all flex items-center justify-center"><Check size={24} /></button>
+                          <button onClick={() => handleDenyAccess(site.id)} className="h-14 w-14 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-all flex items-center justify-center"><CloseIcon size={24} /></button>
                       </div>
                    </div>
-                   <div className="flex space-x-3">
-                      <button onClick={() => handleAuthorizeAccess(site.id)} className="h-14 w-14 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 hover:scale-105 transition-all flex items-center justify-center"><Check size={24} /></button>
-                      <button onClick={() => handleDenyAccess(site.id)} className="h-14 w-14 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-all flex items-center justify-center"><CloseIcon size={24} /></button>
+                   
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-100 rounded-2xl">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Activity</p>
+                        <p className="text-[10px] font-bold text-slate-700 uppercase truncate">{site.pendingVisitor?.activity}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">RAWA No.</p>
+                        <p className="text-[10px] font-bold text-slate-700 uppercase">{site.pendingVisitor?.rawaNumber || '-'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Staff</p>
+                        <p className="text-[10px] font-bold text-slate-700 uppercase">{site.pendingVisitor?.personnel?.length || 0} Total</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Expected End</p>
+                        <p className="text-[10px] font-bold text-slate-700 uppercase">{formatDate(site.pendingVisitor?.expectedEndTime)}</p>
+                      </div>
                    </div>
                 </div>
               ))}
@@ -278,12 +306,24 @@ const Dashboard: React.FC = () => {
                               </div>
                            </div>
                            <div className="h-px bg-slate-100"></div>
-                           <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                 <Tower size={14} className="text-blue-600" />
-                                 <span className="text-[10px] font-black text-slate-900 uppercase">{site.name}</span>
-                              </div>
-                              <p className="text-[9px] font-bold text-slate-400 uppercase italic">Act: {site.currentVisitor?.activity}</p>
+                           <div className="space-y-2">
+                             <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                   <Tower size={14} className="text-blue-600" />
+                                   <span className="text-[10px] font-black text-slate-900 uppercase">{site.name}</span>
+                                </div>
+                                <div className="flex items-center space-x-1 text-[9px] font-black text-slate-400 uppercase">
+                                  <Hash size={10} />
+                                  <span>{site.currentVisitor?.rawaNumber || 'NO RAWA'}</span>
+                                </div>
+                             </div>
+                             <div className="flex items-center justify-between">
+                               <p className="text-[9px] font-bold text-slate-400 uppercase italic">Act: {site.currentVisitor?.activity}</p>
+                               <div className="flex items-center space-x-1 text-[9px] font-bold text-rose-500">
+                                  <Calendar size={10} />
+                                  <span>Ends: {formatDate(site.currentVisitor?.expectedEndTime)}</span>
+                               </div>
+                             </div>
                            </div>
                         </div>
                       ))}
