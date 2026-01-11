@@ -152,16 +152,20 @@ const VendorAccess: React.FC = () => {
     if (!selectedSite?.gpsCoordinates) return setGpsVerified(true);
     const coords = selectedSite.gpsCoordinates.split(',').map(n => parseFloat(n.trim()));
     if (isNaN(coords[0])) return setGpsVerified(true);
-    const R = 6371e3;
-    const φ1 = lat * Math.PI/180;
-    const φ2 = coords[0] * Math.PI/180;
-    const Δφ = (coords[0]-lat) * Math.PI/180;
-    const Δλ = (coords[1]-lng) * Math.PI/180;
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const d = R * c;
+    const d = calculateDistance(lat, lng, coords[0], coords[1] || 0);
     setDistanceToSite(d);
     setGpsVerified(d < 800); 
+  };
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
   const capturePhoto = async () => {
@@ -201,7 +205,7 @@ const VendorAccess: React.FC = () => {
     }
   };
 
-  const startCamera = (mode: string) => { setStreamActive(true); };
+  const startCamera = (mode: 'user' | 'environment') => { setFacingMode(mode); setStreamActive(true); };
   const stopCamera = () => { setStreamActive(false); };
 
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -328,16 +332,31 @@ const VendorAccess: React.FC = () => {
     try {
       if (waitingFor === 'SITE') {
         await apiService.requestAccess(selectedSite.id, {
-          vendorId: activeVendor.id, leadName: activeVendor.fullName, contactNumber: activeVendor.contactNumber,
-          personnel: loginFormValues.personnel, vendor: activeVendor.company, activity: loginFormValues.activity as string,
-          photo: capturedPhoto || undefined, rocLogged: true, rocName: loginFormValues.rocName as string,
-          rocTime: loginFormValues.rocTime as string, nocLogged: false
+          vendorId: activeVendor.id, 
+          leadName: activeVendor.fullName, 
+          contactNumber: activeVendor.contactNumber,
+          personnel: loginFormValues.personnel, 
+          vendor: activeVendor.company, 
+          activity: loginFormValues.activity as string,
+          photo: capturedPhoto || undefined,
+          rocLogged: true, 
+          rocName: loginFormValues.rocName as string,
+          rocTime: loginFormValues.rocTime as string, 
+          nocLogged: false
         });
       } else if (waitingFor === 'KEY') {
-        await apiService.requestKeyBorrow(selectedSite.id, { siteId: selectedSite.id, siteName: selectedSite.name, ...keyBorrowValues });
+        await apiService.requestKeyBorrow(selectedSite.id, { 
+          siteId: selectedSite.id, 
+          siteName: selectedSite.name, 
+          ...keyBorrowValues 
+        });
       }
       setActiveModal('Waiting');
-    } catch (err) { notify('Network Error', 'error'); } finally { setIsSubmitting(false); }
+    } catch (err) { 
+      notify('Network Error', 'error'); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const confirmAccess = async () => {
@@ -357,7 +376,13 @@ const VendorAccess: React.FC = () => {
     } catch (err) { notify('Sync error', 'error'); }
   };
 
-  const closeModals = () => { setActiveModal(null); setCapturedPhoto(null); setWaitingFor(null); setStreamActive(false); setAdditionalPersonnel([]); };
+  const closeModals = () => { 
+    setActiveModal(null); 
+    setCapturedPhoto(null); 
+    setWaitingFor(null); 
+    setStreamActive(false); 
+    setAdditionalPersonnel([]); 
+  };
 
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
@@ -373,7 +398,7 @@ const VendorAccess: React.FC = () => {
           <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8">
             <div className="flex justify-between items-start pointer-events-auto">
                <div className="w-48 h-48 bg-slate-900 rounded-3xl border border-white/15 p-1 overflow-hidden"><div ref={mapContainerRef} className="w-full h-full rounded-2xl"></div></div>
-               <button onClick={stopCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-rose-600"><X size={24} /></button>
+               <button onClick={stopCamera} className="p-4 bg-black/60 text-white rounded-full hover:bg-rose-600 transition-colors"><X size={24} /></button>
             </div>
             <div className="flex flex-col items-center space-y-6 pointer-events-auto">
                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${gpsVerified ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border-rose-500/30'}`}>
@@ -472,7 +497,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in duration-300">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Vendor Registration</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
               </div>
               <form onSubmit={handleRegisterSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
@@ -527,7 +552,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
               </div>
               <form onSubmit={handleLoginProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
@@ -540,7 +565,7 @@ const VendorAccess: React.FC = () => {
                        <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logged Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-blue-500 outline-none" /></div>
                     </div>
                  </div>
-                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Transmit to FO</button>
+                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-blue-700">Transmit to FO</button>
               </form>
            </div>
         </div>
@@ -551,7 +576,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Key Request Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
               </div>
               <form onSubmit={handleKeyBorrowSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
@@ -560,7 +585,7 @@ const VendorAccess: React.FC = () => {
                  <div className="space-y-4">
                     <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason for Borrowing</label><input name="reason" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-sm focus:border-amber-500 outline-none" placeholder="e.g. Cabinet Access" /></div>
                  </div>
-                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Request Key Release</button>
+                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-amber-700">Request Key Release</button>
               </form>
            </div>
         </div>
@@ -571,7 +596,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Exit Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
               </div>
               <form onSubmit={handleLogoutProtocolSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
@@ -583,7 +608,7 @@ const VendorAccess: React.FC = () => {
                        <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROC Logout Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xs focus:border-rose-500 outline-none" /></div>
                     </div>
                  </div>
-                 <button type="submit" className="w-full py-5 bg-rose-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Terminate Session</button>
+                 <button type="submit" className="w-full py-5 bg-rose-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-rose-700">Terminate Session</button>
               </form>
            </div>
         </div>
@@ -594,7 +619,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
               <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                  <h2 className="text-2xl font-black uppercase tracking-tight">Return Protocol</h2>
-                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button>
+                 <button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full transition-colors"><X size={24} /></button>
               </div>
               <form onSubmit={handleKeyReturnSubmit} className="p-8 overflow-y-auto space-y-6">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group">
@@ -604,7 +629,7 @@ const VendorAccess: React.FC = () => {
                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Site: {selectedSite.name}</p>
                    <p className="text-xs font-bold text-slate-900">Ensure the vault is physically locked before submission.</p>
                  </div>
-                 <button type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl">Complete Key Return</button>
+                 <button type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl transition-all hover:bg-emerald-700">Complete Key Return</button>
               </form>
            </div>
         </div>
@@ -630,7 +655,7 @@ const VendorAccess: React.FC = () => {
                  <button onClick={finalizeRequest} disabled={isSubmitting} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-2xl shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center space-x-2">
                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><Check size={20} /> <span>Digitally Sign & Send</span></>}
                  </button>
-                 <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Back to Protocol</button>
+                 <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest transition-colors hover:text-slate-600">Back to Protocol</button>
               </div>
            </div>
         </div>
@@ -644,11 +669,11 @@ const VendorAccess: React.FC = () => {
               </div>
               <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">{isAuthorized ? 'Access Granted' : 'Pending FO Approval'}</h2>
               {isAuthorized ? (
-                <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:brightness-110">Open Gate & Start Work</button>
+                <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:brightness-110 transition-all">Open Gate & Start Work</button>
               ) : (
                 <div className="space-y-4">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Polling secure connection every 3s...</p>
-                  <button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Terminate Request</button>
+                  <button onClick={closeModals} className="text-[10px] font-black text-rose-500 uppercase tracking-widest transition-colors hover:text-rose-700">Terminate Request</button>
                 </div>
               )}
            </div>
@@ -660,7 +685,7 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-sm rounded-[48px] overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
               <div className="h-48 bg-slate-900 relative">
                  {activeVendor.photo && <img src={activeVendor.photo} className="w-full h-full object-cover opacity-50" />}
-                 <button onClick={closeModals} className="absolute top-6 right-6 p-2 bg-white/20 text-white rounded-full hover:bg-white/40"><X size={20} /></button>
+                 <button onClick={closeModals} className="absolute top-6 right-6 p-2 bg-white/20 text-white rounded-full hover:bg-white/40 transition-colors"><X size={20} /></button>
                  <div className="absolute -bottom-10 left-10 h-24 w-24 rounded-3xl border-4 border-white overflow-hidden bg-slate-200">
                     <img src={activeVendor.photo} className="w-full h-full object-cover" />
                  </div>
@@ -675,7 +700,7 @@ const VendorAccess: React.FC = () => {
                     <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Contact</span><span>{activeVendor.contactNumber}</span></div>
                     <div className="flex justify-between text-[10px] font-black uppercase border-b border-slate-50 pb-2"><span className="text-slate-400">Status</span><span className="text-emerald-500">Verified</span></div>
                  </div>
-                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase text-[10px] tracking-widest">Close Profile</button>
+                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-2xl uppercase text-[10px] tracking-widest transition-colors hover:bg-slate-200">Close Profile</button>
               </div>
            </div>
         </div>
