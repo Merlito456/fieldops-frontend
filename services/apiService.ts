@@ -15,14 +15,20 @@ export const apiService = {
 
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout for responsiveness
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           ...options?.headers,
         },
       });
       
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP ${response.status}`);
@@ -32,10 +38,18 @@ export const apiService = {
       return await response.json();
     } catch (error: any) {
       this.isOffline = true;
-      console.warn(`API Bridge Failure. Falling back to Local Storage for ${endpoint}`);
+      console.warn(`API Bridge Failure for ${endpoint}. Falling back to Local Storage.`);
       
       const method = options?.method || 'GET';
       const body = options?.body ? JSON.parse(options.body as string) : null;
+
+      // Handle Auth Routes
+      if (endpoint.includes('/auth/vendor/login')) {
+        return storageService.loginVendor(body.username, body.password) as any;
+      }
+      if (endpoint.includes('/auth/vendor/register')) {
+        return storageService.registerVendor(body) as any;
+      }
 
       // Handle Site Routes
       if (endpoint.startsWith('/sites')) {
@@ -75,16 +89,27 @@ export const apiService = {
       }
 
       if (endpoint.startsWith('/tasks')) return storageService.getTasks() as any;
+      if (endpoint.startsWith('/inventory')) return storageService.getMaterials() as any;
+      if (endpoint.startsWith('/officers')) return storageService.getOfficers() as any;
       
-      return [] as any;
+      return null as any;
     }
   },
 
   ping: async (): Promise<boolean> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout for ping
+
     try {
-      const res = await fetch(`${API_BASE_URL}/health`).catch(() => null);
-      return !!res?.ok;
-    } catch {
+      const response = await fetch(`${API_BASE_URL}/health`, { 
+        method: 'GET',
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.warn('Ping node unreachable:', error);
       return false;
     }
   },
