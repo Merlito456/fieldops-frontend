@@ -141,8 +141,12 @@ const VendorAccess: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
-    const username = (formData.get('username') as string || '').trim().toUpperCase();
-    const password = (formData.get('password') as string || '').trim().toUpperCase();
+    const rawUsername = formData.get('username') as string || '';
+    const rawPassword = formData.get('password') as string || '';
+    
+    // Normalize to uppercase for case-insensitivity
+    const username = rawUsername.trim().toUpperCase();
+    const password = rawPassword.trim().toUpperCase();
 
     try {
       const vendor = await apiService.loginVendor(username, password);
@@ -154,8 +158,12 @@ const VendorAccess: React.FC = () => {
       } else {
         notify('Invalid Credentials Provided', 'error');
       }
-    } catch (err) {
-      notify('Authentication Network Failure', 'error');
+    } catch (err: any) {
+      if (err.message === 'AUTH_FAILED') {
+        notify('Invalid Username or Password', 'error');
+      } else {
+        notify('Infrastructure Bridge Offline. Retrying...', 'info');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -296,7 +304,7 @@ const VendorAccess: React.FC = () => {
            <div className="space-y-4">
               <div className="h-20 w-20 bg-slate-900 text-white rounded-2xl mx-auto flex items-center justify-center shadow-2xl"><Shield size={40} /></div>
               <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Vendor Protocol Hub</h1>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Case-Insensitive Secure Portal</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-blue-600">Secure Protocol Gateway</p>
            </div>
            <div className="grid grid-cols-2 gap-6">
               <button onClick={() => setActiveModal('Registration')} className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-xl hover:border-blue-500 transition-all flex flex-col items-center gap-4">
@@ -365,10 +373,10 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">Personnel Login</h2></div>
+              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">Personnel Login</h2></div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
-                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Digital Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
+                 <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Access Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
                  <button disabled={isSubmitting} type="submit" className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">{isSubmitting ? 'Verifying...' : 'Authorize Access'}</button>
                  <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
               </form>
