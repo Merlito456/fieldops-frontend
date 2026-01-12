@@ -92,6 +92,7 @@ export const apiService = {
   getMessages: async (vendorId: string): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>(`/messages/${vendorId}`),
   getAllMessages: async (): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>('/messages'),
   sendMessage: async (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => apiService.request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
+  markMessagesAsRead: async (vendorId: string) => apiService.request(`/messages/read/${vendorId}`, { method: 'PATCH' }),
 
   loginVendor: async (username: string, password?: string): Promise<VendorProfile | null> => apiService.request<VendorProfile | null>('/auth/vendor/login', {
     method: 'POST', body: JSON.stringify({ username, password }),
