@@ -178,7 +178,6 @@ const VendorAccess: React.FC = () => {
     loadInitialData();
   };
 
-  // Added missing handleRegisterSubmit function to process vendor signups
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -209,7 +208,6 @@ const VendorAccess: React.FC = () => {
     }
   };
 
-  // Added missing handleLoginSubmit function to process vendor authentication
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -323,9 +321,9 @@ const VendorAccess: React.FC = () => {
         </div>
       )}
 
-      {/* FLOATING CHAT BUTTON */}
+      {/* FLOATING CHAT BUTTON - PERSISTENT ON DASHBOARD */}
       {activeVendor && selectedSite && !showChat && (
-        <button onClick={() => setShowChat(true)} className="fixed bottom-8 right-8 z-[170] h-16 w-16 bg-blue-600 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all animate-bounce">
+        <button onClick={() => setShowChat(true)} className="fixed bottom-8 right-8 z-[170] h-16 w-16 bg-blue-600 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
           <MessageSquare size={28} />
         </button>
       )}
@@ -353,7 +351,7 @@ const VendorAccess: React.FC = () => {
           <div className="flex justify-between items-center bg-white p-6 rounded-[40px] shadow-sm border border-slate-100">
              <div><h1 className="text-2xl font-black uppercase tracking-tight leading-none">{activeVendor.fullName}</h1><p className="text-blue-600 font-black uppercase text-[10px] tracking-widest mt-1">{activeVendor.company}</p></div>
              <div className="flex gap-2">
-                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200">
+                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200 shadow-sm hover:border-blue-500 transition-colors">
                    {activeVendor.photo ? <img src={activeVendor.photo} className="w-full h-full object-cover" /> : <User size={20} />}
                 </button>
                 <button onClick={() => { apiService.logoutVendor(); setActiveVendor(null); }} className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-rose-600 transition-colors"><LogOut size={20} /></button>
