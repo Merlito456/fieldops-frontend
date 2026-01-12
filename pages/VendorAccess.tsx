@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   LogIn, LogOut, Key, UserCheck, Camera, X, TowerControl as Tower, Search, AlertCircle, ShieldCheck, 
   Loader2, Check, MapPin, User, Shield, Fingerprint, FlipHorizontal, FileText, Hash, UserPlus, 
-  MessageSquare, Send, PlusCircle, MinusCircle, AlertTriangle, Clock
+  MessageSquare, Send, PlusCircle, MinusCircle, AlertTriangle, Clock, Info, CheckCircle2
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { WorkSite, SiteVisitor, KeyLog, VendorProfile, ChatMessage } from '../types';
@@ -48,11 +48,10 @@ const VendorAccess: React.FC = () => {
 
   useEffect(() => { 
     loadInitialData(); 
-    // ADDED: Polling for site list to ensure newly added sites appear automatically
     const interval = setInterval(async () => {
       const fetchedSites = await apiService.getSites();
       if (fetchedSites) setSites(fetchedSites);
-    }, 10000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -147,70 +146,6 @@ const VendorAccess: React.FC = () => {
     setCapturedPhoto(null);
   };
 
-  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const formData = new FormData(e.currentTarget);
-    const rawUsername = formData.get('username') as string || '';
-    const rawPassword = formData.get('password') as string || '';
-    
-    // Normalize to uppercase for case-insensitivity
-    const username = rawUsername.trim().toUpperCase();
-    const password = rawPassword.trim().toUpperCase();
-
-    try {
-      const vendor = await apiService.loginVendor(username, password);
-      if (vendor) {
-        setActiveVendor(vendor);
-        localStorage.setItem('fo_active_vendor_id', vendor.id);
-        closeModals();
-        notify('Kiosk Authorization Successful', 'success');
-      } else {
-        notify('Invalid Credentials Provided', 'error');
-      }
-    } catch (err: any) {
-      if (err.message === 'AUTH_FAILED') {
-        notify('Invalid Username or Password', 'error');
-      } else {
-        notify('Infrastructure Bridge Offline. Retrying...', 'info');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!capturedPhoto) return notify('Identification Photo Required', 'error');
-    setIsSubmitting(true);
-    const f = new FormData(e.currentTarget);
-    const vendor: VendorProfile = {
-      id: `VND-${Date.now()}`,
-      username: (f.get('username') as string || '').trim().toUpperCase(),
-      password: (f.get('password') as string || '').trim().toUpperCase(),
-      fullName: f.get('fullName') as string,
-      company: f.get('company') as string,
-      contactNumber: f.get('contactNumber') as string,
-      idNumber: f.get('idNumber') as string,
-      specialization: f.get('specialization') as string,
-      photo: capturedPhoto,
-      verified: true,
-      createdAt: new Date().toISOString()
-    };
-
-    try {
-      const result = await apiService.registerVendor(vendor);
-      setActiveVendor(result);
-      localStorage.setItem('fo_active_vendor_id', result.id);
-      closeModals();
-      notify('Vendor Registration Successful', 'success');
-    } catch (err) {
-      notify('Registration Failed', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const finalizeRequest = async () => {
     if (!selectedSite || !activeVendor) return;
     setIsSubmitting(true);
@@ -243,7 +178,93 @@ const VendorAccess: React.FC = () => {
     loadInitialData();
   };
 
-  const closeModals = () => { setActiveModal(null); setWaitingFor(null); setCapturedPhoto(null); setStreamActive(false); setAdditionalPersonnel([]); setShowChat(false); };
+  // Added missing handleRegisterSubmit function to process vendor signups
+  const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const f = new FormData(e.currentTarget);
+    const vendorData: VendorProfile = {
+      id: `VND-${Date.now()}`,
+      username: (f.get('username') as string).toUpperCase(),
+      password: (f.get('password') as string).toUpperCase(),
+      fullName: f.get('fullName') as string,
+      company: f.get('company') as string,
+      contactNumber: f.get('contactNumber') as string,
+      idNumber: f.get('idNumber') as string,
+      specialization: f.get('specialization') as string,
+      photo: capturedPhoto || undefined,
+      verified: true,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      const registered = await apiService.registerVendor(vendorData);
+      setActiveVendor(registered);
+      notify('Identity Initialized', 'success');
+      closeModals();
+    } catch (err) {
+      notify('Registration Failed', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Added missing handleLoginSubmit function to process vendor authentication
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const f = new FormData(e.currentTarget);
+    const username = f.get('username') as string;
+    const password = f.get('password') as string;
+
+    try {
+      const vendor = await apiService.loginVendor(username, password);
+      if (vendor) {
+        setActiveVendor(vendor);
+        notify(`Welcome back, ${vendor.fullName}`, 'success');
+        closeModals();
+      } else {
+        notify('Invalid Credentials', 'error');
+      }
+    } catch (err) {
+      notify('Authentication Failure', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLogoutSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!capturedPhoto || !selectedSite) return notify('Exit Photo Required', 'error');
+    setIsSubmitting(true);
+    const f = new FormData(e.currentTarget);
+    try {
+      await apiService.checkOutVendor(selectedSite.id, capturedPhoto, {
+        rocLogoutName: f.get('rocName') as string,
+        rocLogoutTime: f.get('rocTime') as string,
+        activityRemarks: f.get('remarks') as string
+      });
+      notify('Operation Successfully Terminated', 'success');
+      closeModals();
+      loadInitialData();
+    } catch (err) { notify('Logout Failed', 'error'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const handleKeyReturnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!capturedPhoto || !selectedSite) return notify('Return Photo Required', 'error');
+    setIsSubmitting(true);
+    try {
+      await apiService.returnKey(selectedSite.id, capturedPhoto);
+      notify('Key Restored to Site Locker', 'success');
+      closeModals();
+      loadInitialData();
+    } catch (err) { notify('Key Return Failed', 'error'); }
+    finally { setIsSubmitting(false); }
+  };
+
+  const closeModals = () => { setActiveModal(null); setWaitingFor(null); setCapturedPhoto(null); setStreamActive(false); setAdditionalPersonnel([]); setShowChat(false); setSelectedSite(null); };
 
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
@@ -332,7 +353,7 @@ const VendorAccess: React.FC = () => {
           <div className="flex justify-between items-center bg-white p-6 rounded-[40px] shadow-sm border border-slate-100">
              <div><h1 className="text-2xl font-black uppercase tracking-tight leading-none">{activeVendor.fullName}</h1><p className="text-blue-600 font-black uppercase text-[10px] tracking-widest mt-1">{activeVendor.company}</p></div>
              <div className="flex gap-2">
-                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden">
+                <button onClick={() => setActiveModal('Profile')} className="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200">
                    {activeVendor.photo ? <img src={activeVendor.photo} className="w-full h-full object-cover" /> : <User size={20} />}
                 </button>
                 <button onClick={() => { apiService.logoutVendor(); setActiveVendor(null); }} className="p-3 bg-slate-900 text-white rounded-2xl hover:bg-rose-600 transition-colors"><LogOut size={20} /></button>
@@ -375,16 +396,183 @@ const VendorAccess: React.FC = () => {
                 </div>
               </div>
             ))}
-            {sites.length === 0 && <p className="col-span-full py-20 text-center text-slate-400 uppercase font-black text-xs tracking-widest">No infrastructure nodes synchronized.</p>}
           </div>
         </>
       )}
 
-      {/* LOGIN MODAL */}
+      {/* WAITING MODAL */}
+      {activeModal === 'Waiting' && selectedSite && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
+           <div className="bg-white w-full max-md rounded-[48px] p-10 text-center space-y-8 animate-in zoom-in">
+              <div className={`h-24 w-24 mx-auto rounded-full flex items-center justify-center ${isAuthorized ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600 animate-pulse'}`}>
+                 {isAuthorized ? <ShieldCheck size={48} /> : <Loader2 className="animate-spin" size={48} />}
+              </div>
+              <div className="space-y-2">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">{isAuthorized ? 'Authorization Granted' : 'Pending FO Approval'}</h2>
+                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                    {isAuthorized ? 'Field Officer has electronically signed your request. You may proceed.' : 'Your forensic request has been transmitted. FO Engineering is reviewing your credentials.'}
+                 </p>
+              </div>
+              {isAuthorized ? (
+                <button onClick={confirmAccess} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Confirm & Proceed</button>
+              ) : (
+                <button onClick={closeModals} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel Request</button>
+              )}
+           </div>
+        </div>
+      )}
+
+      {/* DISCLAIMER MODAL */}
+      {activeModal === 'Disclaimer' && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
+           <div className="bg-white w-full max-lg rounded-[48px] p-10 space-y-8 animate-in zoom-in">
+              <div className="flex items-center gap-4 text-rose-600">
+                <AlertTriangle size={32} />
+                <h2 className="text-2xl font-black uppercase tracking-tight">Compliance Oath</h2>
+              </div>
+              <div className="space-y-4 text-sm font-medium text-slate-600 leading-relaxed max-h-[40vh] overflow-y-auto pr-4">
+                <p>By proceeding, you certify that all personnel on site are properly equipped with mandated PPE and have reviewed the active RAAWA documentation.</p>
+                <p>You acknowledge that all activities are monitored by NOC and any unauthorized hardware modifications will be reported to FO Engineering.</p>
+                <p>Entry photo and GPS data will be stored as permanent forensic evidence in the site ledger.</p>
+              </div>
+              <div className="flex gap-4">
+                <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="flex-1 py-4 text-[10px] font-black uppercase text-slate-400">Back</button>
+                <button onClick={finalizeRequest} className="flex-[2] py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">I Agree & Sign</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* LOGOUT PROTOCOL MODAL */}
+      {activeModal === 'LogoutProtocol' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Termination Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleLogoutSubmit} className="p-8 space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Exit Evidence Photo</p></div>}
+                 </div>
+                 <div className="space-y-4">
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">ROC Logout Officer</label><input name="rocName" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" placeholder="Officer Name" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">ROC Logout Time</label><input name="rocTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Final Remarks</label><textarea name="remarks" className="w-full p-4 bg-slate-50 rounded-2xl font-medium text-sm italic" placeholder="Activity summary..."></textarea></div>
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-rose-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Terminate Operation</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* KEY RETURN MODAL */}
+      {activeModal === 'KeyReturn' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-md rounded-[48px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Key Restoration</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleKeyReturnSubmit} className="p-8 space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Photo of Key in Cabinet</p></div>}
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Restore Key Control</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* PROFILE MODAL */}
+      {activeModal === 'Profile' && activeVendor && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-md rounded-[48px] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+              <div className="p-10 bg-slate-900 text-white text-center space-y-4">
+                 <div className="h-24 w-24 mx-auto rounded-3xl overflow-hidden border-4 border-white/20 shadow-xl">
+                    <img src={activeVendor.photo} className="w-full h-full object-cover" />
+                 </div>
+                 <div>
+                    <h2 className="text-2xl font-black uppercase tracking-tight">{activeVendor.fullName}</h2>
+                    <p className="text-blue-400 font-black uppercase text-[10px] tracking-widest">{activeVendor.company}</p>
+                 </div>
+              </div>
+              <div className="p-10 space-y-6">
+                 <div className="grid grid-cols-2 gap-6">
+                    <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ID Number</p><p className="text-sm font-black text-slate-900">{activeVendor.idNumber}</p></div>
+                    <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contact</p><p className="text-sm font-black text-slate-900">{activeVendor.contactNumber}</p></div>
+                    <div className="col-span-2"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Specialization</p><p className="text-sm font-black text-slate-900 uppercase">{activeVendor.specialization}</p></div>
+                 </div>
+                 <button onClick={closeModals} className="w-full py-4 bg-slate-100 text-slate-900 font-black rounded-3xl uppercase text-[10px] tracking-widest">Close Profile</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* KEY REQUEST MODAL */}
+      {activeModal === 'KeyBorrow' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-lg rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Key Release Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Release Proof Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), raawaNumber: f.get('raawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center group relative">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Capture Proof</p></div>}</div>
+                 <div className="space-y-4">
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">RAAWA Number</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="raawaNumber" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="REF-2024-XXXX" /></div></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Reason</label><div className="relative"><FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="reason" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Purpose of borrowing" /></div></div>
+                    <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Released By</label><div className="relative"><UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} /><input name="releasedBy" required className="w-full p-4 pl-10 bg-slate-50 rounded-2xl font-black text-sm uppercase focus:border-amber-500 outline-none" placeholder="Guard or Caretaker Name" /></div></div>
+                 </div>
+                 <button type="submit" className="w-full py-5 bg-amber-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl transition-all hover:bg-amber-700">Request Release</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* ACCESS REQUEST MODAL */}
+      {activeModal === 'LoginProtocol' && selectedSite && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight">Entrance Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('ID Photo Required', 'error'); setLoginFormValues({ activity: f.get('activity'), raawaNumber: f.get('raawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Forensic ID</p></div>}</div>
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-blue-600 tracking-widest">Personnel</h3><input readOnly defaultValue={activeVendor?.fullName} className="w-full p-4 bg-slate-100 rounded-2xl font-black text-sm uppercase" /><button type="button" onClick={() => setAdditionalPersonnel(p => [...p, ''])} className="flex items-center gap-2 text-blue-600 font-black text-[10px] uppercase tracking-widest"><PlusCircle size={14} /> Add Additional Team</button>{additionalPersonnel.map((p, i) => <div key={i} className="flex gap-2"><input value={p} onChange={e => { const updated = [...additionalPersonnel]; updated[i] = e.target.value; setAdditionalPersonnel(updated); }} className="flex-1 p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-blue-600" /><button type="button" onClick={() => setAdditionalPersonnel(prev => prev.filter((_, idx) => idx !== i))} className="text-rose-500"><MinusCircle size={20} /></button></div>)}</div>
+                    <div className="space-y-4"><h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest">Task Matrix</h3><input name="activity" placeholder="Detailed Activity" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="raawaNumber" placeholder="RAAWA Reference" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /><input name="checkedBy" placeholder="On-Site Guard Name" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase outline-none focus:border-emerald-600" /></div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4"><div><label className="text-[9px] font-black text-slate-400 uppercase">Start Time</label><input name="startTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Estimated Exit</label><input name="expectedEndTime" type="datetime-local" required className="w-full p-4 bg-slate-50 rounded-2xl font-bold text-xs" /></div></div>
+                 <div className="bg-slate-900 rounded-[32px] p-6 text-white space-y-4"><h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">ROC Compliance</h3><div className="grid grid-cols-2 gap-4"><input name="rocName" placeholder="ROC Officer" required className="w-full p-3 bg-white/5 rounded-xl text-xs uppercase" /><input name="rocTime" type="datetime-local" required className="w-full p-3 bg-white/5 rounded-xl text-xs" /></div></div>
+                 <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">Confirm & Sign Transmission</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* REGISTRATION MODAL */}
+      {activeModal === 'Registration' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+           <div className="bg-white w-full max-2xl rounded-[48px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+              <div className="p-8 border-b border-gray-100 flex items-center justify-between"><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">Vendor Registry</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleRegisterSubmit} className="p-8 overflow-y-auto space-y-6">
+                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-100 rounded-[32px] overflow-hidden cursor-pointer border-2 border-dashed border-slate-300 flex items-center justify-center">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-2"><Camera size={40} className="mx-auto text-slate-400" /><p className="text-[10px] font-black uppercase text-slate-400">Profile Identity Photo</p></div>}
+                 </div>
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Full Name</label><input name="fullName" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Company</label><input name="company" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Contact No.</label><input name="contactNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Govt ID Number</label><input name="idNumber" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Username (CAPS)</label><input name="username" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Password (CAPS)</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                    </div>
+                    <div className="col-span-2 space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1">Specialization</label><input name="specialization" required placeholder="e.g. Microwave Engineer, Rigger, Electrician" className="w-full p-4 bg-slate-50 rounded-2xl font-black text-sm uppercase" /></div>
+                 </div>
+                 <button type="submit" disabled={isSubmitting} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl uppercase text-xs shadow-xl tracking-widest">{isSubmitting ? 'Writing to Registry...' : 'Initialize Identity'}</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* PERSONNEL LOGIN MODAL */}
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
            <div className="bg-white w-full max-sm rounded-[48px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><User size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">Personnel Login</h2></div>
+              <div className="text-center space-y-2"><div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center"><LogIn size={32} /></div><h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 leading-none">Personnel Login</h2></div>
               <form onSubmit={handleLoginSubmit} className="space-y-4">
                  <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Digital Username</label><input name="username" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
                  <div className="space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Access Password</label><input name="password" type="password" required className="w-full p-4 bg-slate-50 border-2 border-transparent rounded-2xl font-bold uppercase outline-none focus:border-emerald-600" /></div>
