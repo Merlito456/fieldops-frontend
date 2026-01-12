@@ -27,20 +27,30 @@ const Dashboard: React.FC = () => {
   const loadData = async () => {
     try {
       const [fetchedTasks, fetchedSites] = await Promise.all([apiService.getTasks(), apiService.getSites()]);
-      setTasks(fetchedTasks || []); setSites(fetchedSites || []);
-    } catch (err) { notify('Sync Failure', 'error'); }
-    finally { setIsLoading(false); }
+      setTasks(fetchedTasks || []); 
+      setSites(fetchedSites || []);
+    } catch (err) { 
+      notify('Sync Failure', 'error'); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
-  useEffect(() => { loadData(); const interval = setInterval(loadData, 5000); return () => clearInterval(interval); }, []);
+  useEffect(() => { 
+    loadData(); 
+    const interval = setInterval(loadData, 5000); 
+    return () => clearInterval(interval); 
+  }, []);
 
   useEffect(() => {
     let interval: number | null = null;
     if (activeChatSiteId) {
-      interval = window.setInterval(async () => {
+      const fetchMsgs = async () => {
         const msgs = await apiService.getMessages(activeChatSiteId);
         if (msgs) setChatMessages(msgs);
-      }, 3000);
+      };
+      fetchMsgs(); // Initial fetch
+      interval = window.setInterval(fetchMsgs, 3000);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [activeChatSiteId]);
@@ -79,6 +89,7 @@ const Dashboard: React.FC = () => {
               <button onClick={() => setActiveChatSiteId(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={24} /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/50">
+              {chatMessages.length === 0 && <p className="text-center py-20 text-[10px] font-black text-slate-400 uppercase tracking-widest">Awaiting Vendor communication link...</p>}
               {chatMessages.map(m => (
                 <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[80%] p-5 rounded-3xl text-sm font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
@@ -153,7 +164,10 @@ const Dashboard: React.FC = () => {
                          {s.currentVisitor?.photo && <img src={s.currentVisitor.photo} className="h-12 w-12 rounded-xl object-cover shadow-md" />}
                          <div><h4 className="text-sm font-black uppercase tracking-tight">{s.currentVisitor?.leadName}</h4><p className="text-[9px] font-bold text-slate-400 uppercase">{s.currentVisitor?.vendor}</p></div>
                       </div>
-                      <button onClick={() => setActiveChatSiteId(s.id)} className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform"><MessageSquare size={16} /></button>
+                      <button onClick={() => setActiveChatSiteId(s.id)} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
+                        <MessageSquare size={16} />
+                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
+                      </button>
                    </div>
                    <div className="h-px bg-slate-200"></div>
                    <div className="flex justify-between items-center text-[10px] font-black uppercase">
@@ -162,6 +176,7 @@ const Dashboard: React.FC = () => {
                    </div>
                 </div>
               ))}
+              {activeVisitors.length === 0 && <p className="col-span-full py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No active missions detected on site.</p>}
            </div>
         </div>
       </div>
