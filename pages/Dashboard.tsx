@@ -9,15 +9,17 @@ import {
 import StatsCard from '../components/StatsCard';
 import { useNotify } from '../App';
 import { apiService } from '../services/apiService';
-import { WorkSite, WorkTask, ChatMessage } from '../types';
+import { WorkSite, WorkTask, ChatMessage, VendorProfile } from '../types';
 
 const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [sites, setSites] = useState<WorkSite[]>([]);
+  const [vendors, setVendors] = useState<VendorProfile[]>([]);
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
-  const [activeChatSiteId, setActiveChatSiteId] = useState<string | null>(null);
+  const [activeChatVendorId, setActiveChatVendorId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [showFloatingChat, setShowFloatingChat] = useState(false);
@@ -27,9 +29,16 @@ const Dashboard: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [fetchedTasks, fetchedSites] = await Promise.all([apiService.getTasks(), apiService.getSites()]);
+      const [fetchedTasks, fetchedSites, fetchedVendors, fetchedMsgs] = await Promise.all([
+        apiService.getTasks(), 
+        apiService.getSites(),
+        apiService.getVendors(),
+        apiService.getAllMessages()
+      ]);
       setTasks(fetchedTasks || []); 
       setSites(fetchedSites || []);
+      setVendors(fetchedVendors || []);
+      setAllMessages(fetchedMsgs || []);
     } catch (err) { 
       notify('Sync Failure', 'error'); 
     } finally { 
@@ -44,21 +53,11 @@ const Dashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let interval: number | null = null;
-    if (activeChatSiteId && (showFloatingChat || activeChatSiteId)) {
-      const fetchMsgs = async () => {
-        try {
-          const msgs = await apiService.getMessages(activeChatSiteId);
-          if (msgs) setChatMessages(msgs);
-        } catch (e) {
-          console.error("Chat sync error:", e);
-        }
-      };
-      fetchMsgs(); 
-      interval = window.setInterval(fetchMsgs, 3000);
+    if (activeChatVendorId) {
+      const vendorMsgs = allMessages.filter(m => m.vendorId === activeChatVendorId);
+      setChatMessages(vendorMsgs);
     }
-    return () => { if (interval) clearInterval(interval); };
-  }, [activeChatSiteId, showFloatingChat]);
+  }, [allMessages, activeChatVendorId]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -67,21 +66,41 @@ const Dashboard: React.FC = () => {
   const handleDenyAccess = async (siteId: string) => { await apiService.request(`/access/cancel/${siteId}`, { method: 'POST' }); loadData(); };
 
   const handleSendChat = async () => {
-    if (!chatInput.trim() || !activeChatSiteId) return;
-    const msg = { siteId: activeChatSiteId, senderId: 'FO-001', senderName: 'FO ENG', role: 'FO' as const, content: chatInput };
+    if (!chatInput.trim() || !activeChatVendorId) return;
+    const msg = { vendorId: activeChatVendorId, senderId: 'FO-001', senderName: 'FO ENG', role: 'FO' as const, content: chatInput };
     setChatInput('');
     try {
       await apiService.sendMessage(msg);
-      const msgs = await apiService.getMessages(activeChatSiteId);
-      if (msgs) setChatMessages(msgs);
+      loadData();
     } catch (err) {
       notify('Failed to send message', 'error');
     }
   };
 
+  // UI Logic: Sort vendors by latest message timestamp
+  const getSortedVendors = () => {
+    return [...vendors].sort((a, b) => {
+      const aMsgs = allMessages.filter(m => m.vendorId === a.id);
+      const bMsgs = allMessages.filter(m => m.vendorId === b.id);
+      const aTime = aMsgs.length > 0 ? new Date(aMsgs[aMsgs.length - 1].timestamp).getTime() : 0;
+      const bTime = bMsgs.length > 0 ? new Date(bMsgs[bMsgs.length - 1].timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+  };
+
+  const getUnreadCount = (vendorId: string) => {
+    // Basic logic: Count VENDOR messages that are unread (simulated unread as messages since last open)
+    const msgs = allMessages.filter(m => m.vendorId === vendorId && m.role === 'VENDOR');
+    // If user is currently chatting with this vendor, unread is 0
+    if (activeChatVendorId === vendorId) return 0;
+    return msgs.length > 0 ? msgs.length : 0; // In a real app we'd track isRead in DB
+  };
+
   const pendingAccess = sites.filter(s => s.pendingVisitor && !s.accessAuthorized);
   const pendingKeys = sites.filter(s => s.pendingKeyLog && !s.keyAccessAuthorized);
   const activeVisitors = sites.filter(s => s.currentVisitor);
+  
+  const totalUnreadMessages = vendors.reduce((acc, v) => acc + (getUnreadCount(v.id) > 0 ? 1 : 0), 0);
 
   if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 size={48} className="text-blue-600 animate-spin" /></div>;
 
@@ -96,36 +115,54 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquare size={18} className="text-blue-500" />
-                <h3 className="text-xs font-black uppercase tracking-tight">FO Comms Hub</h3>
+                <h3 className="text-xs font-black uppercase tracking-tight">Vendor Comms Hub</h3>
               </div>
               <button onClick={() => setShowFloatingChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
             </div>
-            <select 
-              value={activeChatSiteId || ''} 
-              onChange={(e) => setActiveChatSiteId(e.target.value)}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-2.5 text-[11px] font-black uppercase outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
-            >
-              <option value="" className="text-slate-900">Select Active Site Link...</option>
-              {sites.map(s => (
-                <option key={s.id} value={s.id} className="text-slate-900">{s.name} ({s.id})</option>
-              ))}
-            </select>
+            
+            {/* VENDOR SELECTOR (MESSENGER STYLE) */}
+            <div className="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scrollbar">
+              {getSortedVendors().map(v => {
+                const unread = getUnreadCount(v.id);
+                const isActive = activeChatVendorId === v.id;
+                return (
+                  <button 
+                    key={v.id} 
+                    onClick={() => setActiveChatVendorId(v.id)}
+                    className={`flex items-center justify-between p-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className="h-8 w-8 rounded-full bg-slate-800 border border-white/20 overflow-hidden">
+                          <img src={v.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.fullName}`} className="h-full w-full object-cover" />
+                       </div>
+                       <div className="text-left">
+                          <p className="text-[10px] font-black uppercase leading-none">{v.fullName}</p>
+                          <p className={`text-[8px] font-bold mt-0.5 ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>{v.company}</p>
+                       </div>
+                    </div>
+                    {unread > 0 && !isActive && (
+                      <span className="h-2 w-2 bg-blue-500 rounded-full animate-pulse shadow-lg shadow-blue-500/50"></span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
-            {!activeChatSiteId ? (
+            {!activeChatVendorId ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 p-8">
                 <div className="h-16 w-16 bg-slate-100 rounded-3xl flex items-center justify-center text-slate-300">
-                  <Tower size={32} />
+                  <Users size={32} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">System Standby</p>
-                  <p className="text-[9px] text-slate-400 font-bold mt-1">Establish a link with a site node to initiate vendor communications.</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Select Personnel</p>
+                  <p className="text-[9px] text-slate-400 font-bold mt-1">Select a vendor unit from the ledger above to open a secure channel.</p>
                 </div>
               </div>
             ) : (
               <>
-                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Channel Empty. Awaiting vendor ping...</p>}
+                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Channel Established. Send a signal.</p>}
                 {chatMessages.map(m => (
                   <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] p-4 rounded-3xl text-[11px] font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
@@ -145,13 +182,13 @@ const Dashboard: React.FC = () => {
               value={chatInput} 
               onChange={e => setChatInput(e.target.value)} 
               onKeyPress={e => e.key === 'Enter' && handleSendChat()} 
-              disabled={!activeChatSiteId}
-              placeholder="Send instruction to vendor..." 
+              disabled={!activeChatVendorId}
+              placeholder="Send mission directive..." 
               className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-[11px] font-black outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50" 
             />
             <button 
               onClick={handleSendChat} 
-              disabled={!activeChatSiteId || !chatInput.trim()}
+              disabled={!activeChatVendorId || !chatInput.trim()}
               className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
             >
               <Send size={18} />
@@ -168,8 +205,10 @@ const Dashboard: React.FC = () => {
         >
           <div className="relative">
             <MessageSquare size={28} className="group-hover:rotate-12 transition-transform" />
-            {(pendingAccess.length > 0 || pendingKeys.length > 0 || activeVisitors.length > 0) && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 bg-rose-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
+            {(totalUnreadMessages > 0) && (
+              <span className="absolute -top-2 -right-2 h-6 w-6 bg-rose-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-slate-900 animate-bounce">
+                {totalUnreadMessages}
+              </span>
             )}
           </div>
         </button>
@@ -191,7 +230,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <div className="flex gap-2 mt-3">
                           <span className="text-[8px] font-black uppercase px-2 py-1 bg-white rounded border">{s.pendingVisitor?.vendor}</span>
-                          <button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="text-[8px] font-black uppercase px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1"><MessageSquare size={10} /> Message</button>
+                          <button onClick={() => { setActiveChatVendorId(s.pendingVisitor?.vendorId || null); setShowFloatingChat(true); }} className="text-[8px] font-black uppercase px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1"><MessageSquare size={10} /> Message</button>
                         </div>
                       </div>
                       <div className="flex gap-2"><button onClick={() => handleAuthorizeAccess(s.id)} className="h-14 w-14 bg-emerald-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => handleDenyAccess(s.id)} className="h-14 w-14 bg-white border text-slate-400 rounded-2xl flex items-center justify-center"><X size={24} /></button></div>
@@ -207,7 +246,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <p className="text-[9px] font-bold text-amber-500 uppercase mt-2 italic">Release: {s.pendingKeyLog?.releasedBy}</p>
                       </div>
-                      <div className="flex gap-2"><button onClick={() => handleAuthorizeKey(s.id)} className="h-14 w-14 bg-amber-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="h-14 w-14 bg-white border text-blue-600 rounded-2xl flex items-center justify-center"><MessageSquare size={24} /></button></div>
+                      <div className="flex gap-2"><button onClick={() => handleAuthorizeKey(s.id)} className="h-14 w-14 bg-amber-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => { setActiveChatVendorId(s.pendingKeyLog?.borrowerId || null); setShowFloatingChat(true); }} className="h-14 w-14 bg-white border text-blue-600 rounded-2xl flex items-center justify-center"><MessageSquare size={24} /></button></div>
                    </div>
                 </div>
               ))}
@@ -233,9 +272,11 @@ const Dashboard: React.FC = () => {
                          {s.currentVisitor?.photo && <img src={s.currentVisitor.photo} className="h-12 w-12 rounded-xl object-cover shadow-md" />}
                          <div><h4 className="text-sm font-black uppercase tracking-tight">{s.currentVisitor?.leadName}</h4><p className="text-[9px] font-bold text-slate-400 uppercase">{s.currentVisitor?.vendor}</p></div>
                       </div>
-                      <button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
+                      <button onClick={() => { setActiveChatVendorId(s.currentVisitor?.vendorId || null); setShowFloatingChat(true); }} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
                         <MessageSquare size={16} />
-                        <span className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
+                        {getUnreadCount(s.currentVisitor?.vendorId || '') > 0 && (
+                          <span className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
+                        )}
                       </button>
                    </div>
                    <div className="h-px bg-slate-200"></div>
