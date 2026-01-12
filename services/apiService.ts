@@ -15,27 +15,44 @@ export const apiService = {
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // Increased timeout
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json', ...options?.headers },
       });
       clearTimeout(timeoutId);
+      
+      if (response.status === 401) throw new Error('AUTH_FAILED');
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
       this.isOffline = false;
       return await response.json();
     } catch (error: any) {
+      if (error.message === 'AUTH_FAILED') throw error;
+      
       this.isOffline = true;
-      console.warn(`Bridge Failure: ${endpoint}`);
-      return null as any;
+      console.warn(`Bridge Failure: ${endpoint}`, error.message);
+      throw new Error('BRIDGE_OFFLINE');
     }
   },
 
-  getSites: async (): Promise<WorkSite[]> => apiService.request<WorkSite[]>('/sites'),
-  getTasks: async (): Promise<WorkTask[]> => apiService.request<WorkTask[]>('/tasks'),
+  getSites: async (): Promise<WorkSite[]> => {
+    try {
+      return await apiService.request<WorkSite[]>('/sites');
+    } catch {
+      return storageService.getSites();
+    }
+  },
+  
+  getTasks: async (): Promise<WorkTask[]> => {
+    try {
+      return await apiService.request<WorkTask[]>('/tasks');
+    } catch {
+      return storageService.getTasks();
+    }
+  },
 
-  // Added missing addSite and updateSite methods to enable infrastructure registry updates
   addSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>('/sites', { method: 'POST', body: JSON.stringify(site) }),
   updateSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>(`/sites/${site.id}`, { method: 'PUT', body: JSON.stringify(site) }),
 
