@@ -48,6 +48,17 @@ const SiteManager: React.FC = () => {
     setIsFormOpen(true);
   };
 
+  const handleDeleteSite = async (id: string) => {
+    if (!window.confirm('Are you sure you want to remove this site from the global registry?')) return;
+    try {
+      await apiService.request(`/sites/${id}`, { method: 'DELETE' });
+      notify('Site removed from registry', 'success');
+      loadSites();
+    } catch (err) {
+      notify('Failed to delete site', 'error');
+    }
+  };
+
   const filteredSites = sites.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.id.toLowerCase().includes(searchQuery.toLowerCase())
@@ -105,7 +116,10 @@ const SiteManager: React.FC = () => {
                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest rounded border ${site.type === 'Outdoor' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                      {site.type}
                    </span>
-                   <button onClick={(e) => { e.stopPropagation(); handleOpenForm(site); }} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-blue-100 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={14} /></button>
+                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => { e.stopPropagation(); handleOpenForm(site); }} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-blue-100 hover:text-blue-600"><Edit size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id); }} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-rose-100 hover:text-rose-600"><Trash2 size={14} /></button>
+                   </div>
                 </div>
               </div>
               
