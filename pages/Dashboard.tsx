@@ -4,7 +4,7 @@ import {
   Activity, Clock, CheckCircle, AlertTriangle, BrainCircuit, Zap, ChevronRight, Briefcase, 
   RefreshCw, UserCheck, Key, TowerControl as Tower, ShieldAlert, ShieldCheck, Check, X, 
   Maximize2, Camera, Smartphone, User, Loader2, Cpu, Users, Timer, Eye, ArrowUpRight, 
-  Lock, Unlock, Info, Hash, Calendar, MessageSquare, Send
+  Lock, Unlock, Info, Hash, Calendar, MessageSquare, Send, ShieldPlus, Landmark
 } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import { useNotify } from '../App';
@@ -65,9 +65,9 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
-  const handleAuthorizeAccess = async (siteId: string) => { await apiService.authorizeAccess(siteId); loadData(); notify('Authorized', 'success'); };
-  const handleAuthorizeKey = async (siteId: string) => { await apiService.authorizeKeyBorrow(siteId); loadData(); notify('Authorized', 'success'); };
-  const handleDenyAccess = async (siteId: string) => { await apiService.request(`/access/cancel/${siteId}`, { method: 'POST' }); loadData(); };
+  const handleAuthorizeAccess = async (siteId: string) => { await apiService.authorizeAccess(siteId); loadData(); notify('Access Authorized', 'success'); };
+  const handleAuthorizeKey = async (siteId: string) => { await apiService.authorizeKeyBorrow(siteId); loadData(); notify('Key Authorized', 'success'); };
+  const handleDenyAccess = async (siteId: string) => { await apiService.request(`/access/cancel/${siteId}`, { method: 'POST' }); loadData(); notify('Request Refused', 'info'); };
 
   const handleSendChat = async () => {
     if (!chatInput.trim() || !activeChatVendorId) return;
@@ -99,6 +99,7 @@ const Dashboard: React.FC = () => {
   const pendingAccess = sites.filter(s => s.pendingVisitor && !s.accessAuthorized);
   const pendingKeys = sites.filter(s => s.pendingKeyLog && !s.keyAccessAuthorized);
   const activeVisitors = sites.filter(s => s.currentVisitor);
+  const activeKeyCustodians = sites.filter(s => s.currentKeyLog && s.keyStatus === 'Borrowed');
   
   const totalUnreadMessages = vendors.reduce((acc, v) => acc + getUnreadCount(v.id), 0);
 
@@ -120,7 +121,6 @@ const Dashboard: React.FC = () => {
               <button onClick={() => setShowFloatingChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
             </div>
             
-            {/* SCROLLABLE VENDOR LIST (FB MESSENGER STYLE) */}
             <div className="flex flex-col gap-1 max-h-40 overflow-y-auto custom-scrollbar pr-1">
               {getSortedVendors().length === 0 && <p className="text-[8px] font-black uppercase text-slate-500 text-center py-4">No Registered Units</p>}
               {getSortedVendors().map(v => {
@@ -224,11 +224,12 @@ const Dashboard: React.FC = () => {
         </button>
       )}
 
+      {/* AUTHORIZATION QUEUE */}
       {(pendingAccess.length > 0 || pendingKeys.length > 0) && (
         <div className="bg-white border-2 border-rose-100 p-8 rounded-[48px] shadow-2xl relative overflow-hidden">
            <div className="absolute top-0 right-0 p-8 opacity-[0.03]"><ShieldAlert size={160} className="text-rose-900" /></div>
            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center space-x-4"><div className="h-14 w-14 bg-rose-600 text-white rounded-3xl flex items-center justify-center shadow-lg"><ShieldAlert size={28} /></div><div><h2 className="text-2xl font-black text-slate-900 uppercase">Access Control Hub</h2><p className="text-[10px] font-black text-rose-500 uppercase">Sign Verification Requests</p></div></div>
+              <div className="flex items-center space-x-4"><div className="h-14 w-14 bg-rose-600 text-white rounded-3xl flex items-center justify-center shadow-lg"><ShieldPlus size={28} /></div><div><h2 className="text-2xl font-black text-slate-900 uppercase">Authorization Queue</h2><p className="text-[10px] font-black text-rose-500 uppercase">Awaiting Signature Verification</p></div></div>
            </div>
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {pendingAccess.map(s => (
@@ -236,7 +237,9 @@ const Dashboard: React.FC = () => {
                    <div className="flex items-center gap-6">
                       {s.pendingVisitor?.photo ? <img src={s.pendingVisitor.photo} onClick={() => setFullScreenImage(s.pendingVisitor?.photo || null)} className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in shadow-xl" /> : <div className="h-24 w-24 rounded-3xl bg-slate-200 flex items-center justify-center text-slate-400"><User size={32} /></div>}
                       <div className="flex-1">
-                        <p className="text-xs font-black text-blue-600 uppercase mb-1">{s.pendingVisitor?.raawaNumber || 'NO_RAAWA'}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-600 uppercase mb-1">
+                          <Landmark size={10} /> <span>Site Access Req</span>
+                        </div>
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <div className="flex gap-2 mt-3">
                           <span className="text-[8px] font-black uppercase px-2 py-1 bg-white rounded border">{s.pendingVisitor?.vendor}</span>
@@ -252,7 +255,9 @@ const Dashboard: React.FC = () => {
                    <div className="flex items-center gap-6">
                       <img src={s.pendingKeyLog?.borrowPhoto} onClick={() => setFullScreenImage(s.pendingKeyLog?.borrowPhoto || null)} className="h-24 w-24 rounded-3xl object-cover cursor-zoom-in shadow-xl" />
                       <div className="flex-1">
-                        <p className="text-xs font-black text-amber-600 uppercase mb-1">{s.pendingKeyLog?.raawaNumber || 'NO_RAAWA'}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 uppercase mb-1">
+                          <Key size={10} /> <span>Key Release Req</span>
+                        </div>
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <p className="text-[9px] font-bold text-amber-500 uppercase mt-2 italic">Release: {s.pendingKeyLog?.releasedBy}</p>
                       </div>
@@ -264,40 +269,80 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {/* STATS OVERVIEW */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard title="Personnel on Site" value={activeVisitors.length} icon={<UserCheck size={24} className="text-indigo-600" />} change="Live Registry" isPositive={true} colorClass="bg-indigo-50" />
-        <StatsCard title="Key Borrows" value={sites.filter(s => s.keyStatus === 'Borrowed').length} icon={<Key size={24} className="text-amber-600" />} change="External Custody" isPositive={false} colorClass="bg-amber-50" />
-        <StatsCard title="Asset Nodes" value={sites.length} icon={<Tower size={24} className="text-blue-600" />} change="Global Sync" isPositive={true} colorClass="bg-blue-50" />
-        <StatsCard title="System Link" value="Active" icon={<Activity size={24} className="text-emerald-600" />} change="Stable" isPositive={true} colorClass="bg-emerald-50" />
+        <StatsCard title="Ongoing Site Access" value={activeVisitors.length} icon={<UserCheck size={24} className="text-indigo-600" />} change="Live Personnel" isPositive={true} colorClass="bg-indigo-50" />
+        <StatsCard title="Keys in Custody" value={activeKeyCustodians.length} icon={<Key size={24} className="text-amber-600" />} change="External Units" isPositive={false} colorClass="bg-amber-50" />
+        <StatsCard title="Infrastructure Nodes" value={sites.length} icon={<Tower size={24} className="text-blue-600" />} change="Global Asset Sync" isPositive={true} colorClass="bg-blue-50" />
+        <StatsCard title="System Bridge" value="Online" icon={<Activity size={24} className="text-emerald-600" />} change="High Stability" isPositive={true} colorClass="bg-emerald-50" />
       </div>
 
-      <div className="bg-white rounded-[48px] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex items-center justify-between"><h3 className="text-xl font-black uppercase tracking-tight">Active Operation Feed</h3></div>
-        <div className="p-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* ONGOING ACTIVITIES HUB */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* CURRENT VISITORS */}
+        <div className="bg-white rounded-[48px] border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><UserCheck size={20} /></div>
+              <h3 className="text-xl font-black uppercase tracking-tight">Ongoing Site Access</h3>
+            </div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeVisitors.length} ACTIVE UNITS</span>
+          </div>
+          <div className="p-8 space-y-4">
               {activeVisitors.map(s => (
-                <div key={s.id} className="bg-slate-50/50 border border-slate-100 p-6 rounded-[32px] space-y-4 hover:shadow-xl transition-all group">
-                   <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                         {s.currentVisitor?.photo && <img src={s.currentVisitor.photo} className="h-12 w-12 rounded-xl object-cover shadow-md" />}
-                         <div><h4 className="text-sm font-black uppercase tracking-tight">{s.currentVisitor?.leadName}</h4><p className="text-[9px] font-bold text-slate-400 uppercase">{s.currentVisitor?.vendor}</p></div>
+                <div key={s.id} className="bg-slate-50/50 border border-slate-100 p-6 rounded-[32px] flex items-center justify-between group transition-all hover:border-indigo-200">
+                   <div className="flex items-center gap-4">
+                      {s.currentVisitor?.photo && <img src={s.currentVisitor.photo} onClick={() => setFullScreenImage(s.currentVisitor?.photo || null)} className="h-16 w-16 rounded-2xl object-cover shadow-md cursor-zoom-in" />}
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-tight leading-none mb-1">{s.currentVisitor?.leadName}</h4>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">{s.currentVisitor?.vendor}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-indigo-600 uppercase">
+                           <Tower size={10} /> <span>{s.name}</span>
+                        </div>
                       </div>
-                      <button onClick={() => { setActiveChatVendorId(s.currentVisitor?.vendorId || null); setShowFloatingChat(true); }} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
-                        <MessageSquare size={16} />
-                        {getUnreadCount(s.currentVisitor?.vendorId || '') > 0 && (
-                          <span className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
-                        )}
-                      </button>
                    </div>
-                   <div className="h-px bg-slate-200"></div>
-                   <div className="flex justify-between items-center text-[10px] font-black uppercase">
-                      <div className="flex items-center gap-1.5"><Tower size={12} className="text-blue-600" /><span>{s.name}</span></div>
-                      <div className="flex items-center gap-1 text-slate-400"><Clock size={12} /><span>{s.currentVisitor?.raawaNumber}</span></div>
+                   <button onClick={() => { setActiveChatVendorId(s.currentVisitor?.vendorId || null); setShowFloatingChat(true); }} className="relative p-3 bg-white border border-slate-200 text-indigo-600 rounded-2xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                    <MessageSquare size={18} />
+                    {getUnreadCount(s.currentVisitor?.vendorId || '') > 0 && (
+                      <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
+                    )}
+                  </button>
+                </div>
+              ))}
+              {activeVisitors.length === 0 && <p className="py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Zero active site logins detected.</p>}
+          </div>
+        </div>
+
+        {/* CURRENT KEY HOLDERS */}
+        <div className="bg-white rounded-[48px] border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><Key size={20} /></div>
+              <h3 className="text-xl font-black uppercase tracking-tight">Active Key Borrowers</h3>
+            </div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeKeyCustodians.length} IN CUSTODY</span>
+          </div>
+          <div className="p-8 space-y-4">
+              {activeKeyCustodians.map(s => (
+                <div key={s.id} className="bg-slate-50/50 border border-slate-100 p-6 rounded-[32px] flex items-center justify-between group transition-all hover:border-amber-200">
+                   <div className="flex items-center gap-4">
+                      {s.currentKeyLog?.borrowPhoto && <img src={s.currentKeyLog.borrowPhoto} onClick={() => setFullScreenImage(s.currentKeyLog?.borrowPhoto || null)} className="h-16 w-16 rounded-2xl object-cover shadow-md cursor-zoom-in" />}
+                      <div>
+                        <h4 className="text-sm font-black uppercase tracking-tight leading-none mb-1">{s.currentKeyLog?.borrowerName}</h4>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">{s.currentKeyLog?.vendor}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 uppercase">
+                           <Clock size={10} /> <span>Borrowed: {new Date(s.currentKeyLog?.borrowTime || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">NODE</p>
+                      <p className="text-xs font-black uppercase text-slate-900">{s.name}</p>
                    </div>
                 </div>
               ))}
-              {activeVisitors.length === 0 && <p className="col-span-full py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No active missions detected on site.</p>}
-           </div>
+              {activeKeyCustodians.length === 0 && <p className="py-20 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest italic">All keys are currently accounted for.</p>}
+          </div>
         </div>
       </div>
     </div>
