@@ -714,7 +714,7 @@ const VendorAccess: React.FC = () => {
                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Expected OUT</label><input name="expectedEndTime" type="datetime-local" required className="w-full p-5 bg-slate-50 rounded-3xl font-bold text-xs" /></div>
                  </div>
                  <div className="bg-slate-900 rounded-[40px] p-8 text-white space-y-6">
-                   <h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">Operational Sign-off</h3>
+                   <h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">Operational Sign-in</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <input name="rocName" placeholder="ROC Name" required className="w-full p-4 bg-white/5 rounded-2xl text-xs uppercase font-black" />
                      <input name="rocTime" type="datetime-local" required className="w-full p-4 bg-white/5 rounded-2xl text-xs font-bold" />
