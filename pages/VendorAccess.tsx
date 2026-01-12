@@ -43,7 +43,7 @@ const VendorAccess: React.FC = () => {
       if (fetchedSites) setSites(fetchedSites);
       setActiveVendor(vendor);
     } catch (err) { 
-      notify('Link: Intermittent Signal', 'info'); 
+      notify('Link Stability: Partial', 'info'); 
     } finally { 
       setIsLoading(false); 
     }
@@ -54,7 +54,7 @@ const VendorAccess: React.FC = () => {
     const interval = setInterval(async () => {
       const fetchedSites = await apiService.getSites();
       if (fetchedSites) setSites(fetchedSites);
-    }, 4000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -66,7 +66,7 @@ const VendorAccess: React.FC = () => {
           const msgs = await apiService.getMessages(activeVendor.id);
           if (msgs) setChatMessages(msgs);
         } catch (e) { 
-          console.error("Comm Bridge Noise..."); 
+          console.error("Comm Lag..."); 
         }
       };
       fetchMsgs();
@@ -82,7 +82,7 @@ const VendorAccess: React.FC = () => {
     if (streamActive) {
       navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false })
         .then(s => { stream = s; if (videoRef.current) videoRef.current.srcObject = s; })
-        .catch(() => { notify('Hardware Bridge Blocked', 'error'); setStreamActive(false); });
+        .catch(() => { notify('Forensic Hub: Access Denied', 'error'); setStreamActive(false); });
     }
     return () => stream?.getTracks().forEach(t => t.stop());
   }, [streamActive, facingMode]);
@@ -96,7 +96,7 @@ const VendorAccess: React.FC = () => {
         if (selectedSite?.gpsCoordinates) {
           const coords = selectedSite.gpsCoordinates.split(',').map(n => parseFloat(n.trim()));
           const d = 6371e3 * 2 * Math.atan2(Math.sqrt(Math.sin((coords[0]-latitude)*Math.PI/360)**2 + Math.cos(latitude*Math.PI/180)*Math.cos(coords[0]*Math.PI/180)*Math.sin((coords[1]-longitude)*Math.PI/360)**2), Math.sqrt(1-(Math.sin((coords[0]-latitude)*Math.PI/360)**2 + Math.cos(latitude*Math.PI/180)*Math.cos(coords[0]*Math.PI/180)*Math.sin((coords[1]-longitude)*Math.PI/360)**2)));
-          setGpsVerified(d < 1500); // 1.5km buffer for stability
+          setGpsVerified(d < 800);
         } else setGpsVerified(true);
       });
     }
@@ -108,8 +108,8 @@ const VendorAccess: React.FC = () => {
       const v = videoRef.current;
       const c = document.createElement('canvas');
       
-      // Proportional Stamping Logic
-      const stampHeight = Math.floor(v.videoHeight * 0.25);
+      // Proportional Stamp Height (20-25% of image height)
+      const stampHeight = Math.floor(v.videoHeight * 0.28);
       c.width = v.videoWidth; 
       c.height = v.videoHeight + stampHeight;
       
@@ -121,31 +121,44 @@ const VendorAccess: React.FC = () => {
       ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
       ctx.restore();
       
-      // Forensic Data Overlay
+      // Stamp Background
       ctx.fillStyle = "#0f172a"; 
       ctx.fillRect(0, v.videoHeight, c.width, stampHeight);
       
+      const siteCoords = selectedSite?.gpsCoordinates?.split(',').map(n => parseFloat(n.trim())) || [0,0];
+      
       const ledger = [
         ["OPERATOR", activeVendor?.fullName?.toUpperCase() || "NEW_VENDOR"], 
-        ["SITE", selectedSite?.name?.toUpperCase() || "N/A"], 
-        ["GPS", `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`], 
-        ["TIME", new Date().toLocaleString()]
+        ["SITE_NAME", selectedSite?.name?.toUpperCase() || "N/A"], 
+        ["SITE_REF", `${siteCoords[0].toFixed(5)}, ${siteCoords[1].toFixed(5)}`],
+        ["CAPTURED", `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`], 
+        ["VERIFIED", gpsVerified ? "LOCATION VERIFIED" : "OUT OF BOUNDS"],
+        ["TIMESTAMP", new Date().toLocaleString()]
       ];
       
-      const fontSize = Math.max(14, Math.floor(c.width / 35));
-      const lineSpacing = Math.floor(stampHeight / 5);
-      const startY = v.videoHeight + Math.floor(stampHeight * 0.2);
+      // Dynamic Sizing based on canvas width
+      const fontSize = Math.max(12, Math.floor(c.width / 38));
+      const lineSpacing = Math.floor(stampHeight / 7.5);
+      const startY = v.videoHeight + Math.floor(stampHeight * 0.15);
       
       ctx.textAlign = "left";
       ledger.forEach((r, i) => {
-        ctx.font = `900 ${fontSize * 0.9}px Inter`; ctx.fillStyle = "rgba(255,255,255,0.4)"; 
+        // Label
+        ctx.font = `900 ${fontSize * 0.8}px Inter`; 
+        ctx.fillStyle = "rgba(255,255,255,0.4)"; 
         ctx.fillText(r[0], fontSize * 2, startY + (i * lineSpacing));
         
-        ctx.font = `bold ${fontSize}px Inter`; ctx.fillStyle = "#ffffff"; 
-        ctx.fillText(r[1], fontSize * 9, startY + (i * lineSpacing));
+        // Value
+        ctx.font = `bold ${fontSize}px Inter`; 
+        if (r[0] === "VERIFIED") {
+          ctx.fillStyle = gpsVerified ? "#34d399" : "#fb7185";
+        } else {
+          ctx.fillStyle = "#ffffff";
+        }
+        ctx.fillText(r[1], fontSize * 10, startY + (i * lineSpacing));
       });
       
-      setCapturedPhoto(c.toDataURL('image/jpeg', 0.85)); 
+      setCapturedPhoto(c.toDataURL('image/jpeg', 0.9)); 
       setStreamActive(false);
     }
   };
@@ -163,12 +176,14 @@ const VendorAccess: React.FC = () => {
       siteId: selectedSite?.id 
     };
     
+    const originalInput = chatInput;
     setChatInput('');
     try {
       await apiService.sendMessage(msg);
       const msgs = await apiService.getMessages(currentVendor.id);
       if (msgs) setChatMessages(msgs);
     } catch (err: any) { 
+      setChatInput(originalInput); 
       notify(`Signal Drop: ${err.message}`, 'error'); 
     }
   };
@@ -198,35 +213,26 @@ const VendorAccess: React.FC = () => {
         });
       }
       setActiveModal('Waiting');
-    } catch (err) { 
-      notify('Link Stability Failure', 'error'); 
-      // Reset state for retry
-      setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow');
-    }
+    } catch (err) { notify('Link Failure: Signal Lost', 'error'); }
     finally { setIsSubmitting(false); }
   };
 
   const confirmAccess = async () => {
     if (!selectedSite) return;
-    setIsSubmitting(true);
-    try {
-      const freshSites = await apiService.getSites();
-      const site = freshSites.find(s => s.id === selectedSite.id);
-      
-      if (waitingFor === 'SITE' && site?.pendingVisitor) {
-        await apiService.checkInVendor(site.id, site.pendingVisitor);
-        notify('Mission Log Initiated', 'success');
-      } else if (waitingFor === 'KEY' && site?.pendingKeyLog) {
-        await apiService.confirmKeyBorrow(site.id);
-        notify('Asset Released', 'success');
-      }
-      closeModals();
-      loadInitialData();
-    } catch (err) {
-      notify('Bridge Handshake Failed', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
+    const freshSites = await apiService.getSites();
+    const site = freshSites.find(s => s.id === selectedSite.id);
+    if (waitingFor === 'SITE' && site?.pendingVisitor) await apiService.checkInVendor(site.id, site.pendingVisitor);
+    else if (waitingFor === 'KEY' && site?.pendingKeyLog) await apiService.confirmKeyBorrow(site.id);
+    
+    // Mission Logic Persistence: DO NOT logout activeVendor here
+    setActiveModal(null);
+    setWaitingFor(null);
+    setCapturedPhoto(null);
+    setStreamActive(false);
+    setAdditionalPersonnel([]);
+    setShowChat(false);
+    setSelectedSite(null);
+    loadInitialData();
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -250,8 +256,8 @@ const VendorAccess: React.FC = () => {
       const registered = await apiService.registerVendor(vendorData);
       setActiveVendor(registered);
       notify('Identity Hub: Verified', 'success');
-      closeModals();
-    } catch (err) { notify('Identity Collision Detected', 'error'); } 
+      setActiveModal(null);
+    } catch (err) { notify('Identity Collision', 'error'); } 
     finally { setIsSubmitting(false); }
   };
 
@@ -265,10 +271,10 @@ const VendorAccess: React.FC = () => {
       const vendor = await apiService.loginVendor(username, password);
       if (vendor) {
         setActiveVendor(vendor);
-        notify(`Handshake: ${vendor.fullName}`, 'success');
-        closeModals();
-      } else { notify('Identity Failure', 'error'); }
-    } catch (err) { notify('Auth Link Drop', 'error'); } 
+        notify(`Authorized: ${vendor.fullName}`, 'success');
+        setActiveModal(null);
+      } else { notify('Credentials Invalid', 'error'); }
+    } catch (err) { notify('Auth Link Failure', 'error'); } 
     finally { setIsSubmitting(false); }
   };
 
@@ -283,23 +289,28 @@ const VendorAccess: React.FC = () => {
         rocLogoutTime: f.get('rocTime') as string,
         activityRemarks: f.get('remarks') as string
       });
-      notify('Registry Closed: Protocol Finished', 'success');
-      closeModals();
+      notify('Log Closed: Mission Terminated', 'success');
+      // DO NOT logout account, just close modal
+      setActiveModal(null);
+      setSelectedSite(null);
+      setCapturedPhoto(null);
       loadInitialData();
-    } catch (err) { notify('Transmission Loss', 'error'); }
+    } catch (err) { notify('Transmission Failure', 'error'); }
     finally { setIsSubmitting(false); }
   };
 
   const handleKeyReturnSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!capturedPhoto || !selectedSite) return notify('Restore Frame Required', 'error');
+    if (!capturedPhoto || !selectedSite) return notify('Key Restore Frame Missing', 'error');
     setIsSubmitting(true);
     try {
       await apiService.returnKey(selectedSite.id, capturedPhoto);
-      notify('Control Registry: Hub Restored', 'success');
-      closeModals();
+      notify('Asset Controller Hub: Restored', 'success');
+      setActiveModal(null);
+      setSelectedSite(null);
+      setCapturedPhoto(null);
       loadInitialData();
-    } catch (err) { notify('Sync Collision', 'error'); }
+    } catch (err) { notify('Handover Sync Error', 'error'); }
     finally { setIsSubmitting(false); }
   };
 
@@ -314,9 +325,9 @@ const VendorAccess: React.FC = () => {
 
   return (
     <div className="relative min-h-full space-y-10 animate-in fade-in duration-700 pb-20">
-      {/* CAMERA OVERLAY - ABSOLUTE PRIORITY LAYER */}
+      {/* CAMERA OVERLAY */}
       {streamActive && (
-        <div className="fixed inset-0 z-[2000] bg-black flex flex-col items-center justify-center">
+        <div className="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center">
           <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} />
           <div className="absolute inset-0 p-8 flex flex-col justify-between pointer-events-none">
             <div className="flex justify-end pointer-events-auto gap-2">
@@ -325,7 +336,7 @@ const VendorAccess: React.FC = () => {
             </div>
             <div className="flex flex-col items-center pointer-events-auto gap-6">
               <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest border ${gpsVerified ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                {gpsVerified === null ? 'SYNCING SAT_LINK...' : gpsVerified ? 'LINK_LOCKED' : 'OUT_OF_BOUNDS'}
+                {gpsVerified === null ? 'SYNCING GPS...' : gpsVerified ? 'SAT_LINK_LOCKED' : 'OUT_OF_BOUNDS'}
               </span>
               <button onClick={capturePhoto} className="w-24 h-24 bg-white rounded-full border-[6px] border-white/20 flex items-center justify-center shadow-2xl">
                 <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white"><Camera size={32} /></div>
@@ -346,7 +357,7 @@ const VendorAccess: React.FC = () => {
             <button onClick={() => setShowChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
-            {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Direct FO Handshake Established.</p>}
+            {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Establishing Bridge Link...</p>}
             {chatMessages.map(m => (
               <div key={m.id} className={`flex ${m.role === 'VENDOR' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] p-4 rounded-3xl text-xs font-medium shadow-sm ${m.role === 'VENDOR' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
@@ -358,7 +369,7 @@ const VendorAccess: React.FC = () => {
             <div ref={chatEndRef} />
           </div>
           <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
-            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} placeholder="Alert Field Officer..." className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-xs font-black outline-none focus:ring-2 focus:ring-blue-600 transition-all" />
+            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} placeholder="Signal Field Officer..." className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-xs font-black outline-none focus:ring-2 focus:ring-blue-600 transition-all" />
             <button onClick={handleSendMessage} className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 transition-all active:scale-95"><Send size={18} /></button>
           </div>
         </div>
@@ -386,7 +397,7 @@ const VendorAccess: React.FC = () => {
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-4">
               <button onClick={() => setActiveModal('Registration')} className="group p-10 bg-white border border-slate-200 rounded-[48px] shadow-xl hover:shadow-2xl hover:border-blue-500 transition-all flex flex-col items-center gap-6">
                  <div className="p-5 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all"><Fingerprint size={40} /></div>
-                 <div><h3 className="text-sm font-black uppercase tracking-tight">Identity Hub</h3><p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">New Enrollment</p></div>
+                 <div><h3 className="text-sm font-black uppercase tracking-tight">Initialize Identity</h3><p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Enrollment Registry</p></div>
               </button>
               <button onClick={() => setActiveModal('PersonnelLogin')} className="group p-10 bg-white border border-slate-200 rounded-[48px] shadow-xl hover:shadow-2xl hover:border-emerald-500 transition-all flex flex-col items-center gap-6">
                  <div className="p-5 bg-emerald-50 text-emerald-600 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-all"><LogIn size={40} /></div>
@@ -436,7 +447,7 @@ const VendorAccess: React.FC = () => {
                 </div>
                 <div className="p-8 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-4">
                    {s.currentVisitor ? (
-                     <button onClick={() => { setSelectedSite(s); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-5 bg-rose-600 text-white rounded-[24px] font-black text-[11px] uppercase shadow-lg hover:brightness-110 active:scale-95 transition-all">Close Registry</button>
+                     <button onClick={() => { setSelectedSite(s); setActiveModal('LogoutProtocol'); }} className="col-span-2 py-5 bg-rose-600 text-white rounded-[24px] font-black text-[11px] uppercase shadow-lg hover:brightness-110 active:scale-95 transition-all">Close Log</button>
                    ) : (
                      <button onClick={() => { setSelectedSite(s); if (s.accessAuthorized) { setWaitingFor('SITE'); setActiveModal('Waiting'); } else setActiveModal('LoginProtocol'); }} className={`py-5 ${s.accessAuthorized ? 'bg-blue-600 animate-pulse' : 'bg-emerald-600'} text-white rounded-[24px] font-black text-[11px] uppercase shadow-lg hover:brightness-110 active:scale-95 transition-all`}>
                        {s.accessAuthorized ? 'Authorized: IN' : 'Request Entry'}
@@ -458,12 +469,12 @@ const VendorAccess: React.FC = () => {
            <div className="bg-white w-full max-w-md rounded-[56px] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
               <div className="text-center space-y-4">
                  <div className="h-20 w-20 bg-emerald-50 text-emerald-600 rounded-3xl mx-auto flex items-center justify-center shadow-sm"><LogIn size={36} /></div>
-                 <h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Portal Access</h2>
+                 <h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Portal Link</h2>
               </div>
               <form onSubmit={handleLoginSubmit} className="space-y-6">
                  <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Username</label><input name="username" required className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-3xl font-black uppercase outline-none focus:border-emerald-600 focus:bg-white transition-all" /></div>
                  <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Password</label><input name="password" type="password" required className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-3xl font-black uppercase outline-none focus:border-emerald-600 focus:bg-white transition-all" /></div>
-                 <button disabled={isSubmitting} type="submit" className="w-full py-6 bg-emerald-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">{isSubmitting ? 'Verifying...' : 'Authorize Access'}</button>
+                 <button disabled={isSubmitting} type="submit" className="w-full py-6 bg-emerald-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl shadow-emerald-600/20 tracking-widest">{isSubmitting ? 'Authenticating...' : 'Authorize Access'}</button>
                  <button type="button" onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancel</button>
               </form>
            </div>
@@ -473,25 +484,25 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'Registration' && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
            <div className="bg-white w-full max-w-2xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Enroll Hub</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Enrollment Hub</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={handleRegisterSubmit} className="p-10 overflow-y-auto space-y-10 custom-scrollbar">
                  <div onClick={() => startCamera('user')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={52} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Enroll Biometric Frame</p></div>}
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={52} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Forensic Identity Enrollment</p></div>}
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-6">
                       <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Full Name</label><input name="fullName" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
                       <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Organization</label><input name="company" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Mobile</label><input name="contactNumber" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Contact</label><input name="contactNumber" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
                     </div>
                     <div className="space-y-6">
                       <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">ID Reference</label><input name="idNumber" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Unit User</label><input name="username" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Unit Pass</label><input name="password" type="password" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Kiosk User</label><input name="username" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
+                      <div className="space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Kiosk Pass</label><input name="password" type="password" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
                     </div>
-                    <div className="col-span-full space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Specialization Matrix</label><input name="specialization" required placeholder="RF, MW, FIBER, RIGGER, ETC" className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
+                    <div className="col-span-full space-y-1.5"><label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">Domain Expertise</label><input name="specialization" required placeholder="RF, MW, FIBER, ETC" className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" /></div>
                  </div>
-                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-[0.2em]">{isSubmitting ? 'Syncing...' : 'Confirm Enrollment'}</button>
+                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">{isSubmitting ? 'Syncing...' : 'Complete Enrollment'}</button>
               </form>
            </div>
         </div>
@@ -504,18 +515,16 @@ const VendorAccess: React.FC = () => {
                  {isAuthorized ? <ShieldCheck size={56} /> : <Loader2 className="animate-spin" size={56} />}
               </div>
               <div className="space-y-4">
-                 <h2 className="text-3xl font-black uppercase tracking-tighter">{isAuthorized ? 'HANDSHAKE READY' : 'PENDING HUB'}</h2>
+                 <h2 className="text-3xl font-black uppercase tracking-tighter">{isAuthorized ? 'GRANTED' : 'PENDING'}</h2>
                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                    {isAuthorized ? 'The Field Officer has released the lock signal. Execute mission parameters now.' : 'Request transmitted. Awaiting FO operational approval handshake...'}
+                    {isAuthorized ? 'Authorized signal received. Proceed to execute protocol.' : 'Bridge active. Awaiting FO operational approval signal...'}
                  </p>
               </div>
               {isAuthorized ? (
-                <button onClick={confirmAccess} disabled={isSubmitting} className="w-full py-6 bg-emerald-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest hover:brightness-110 active:scale-95 transition-all">
-                  {isSubmitting ? 'Synchronizing...' : 'Execute Mission'}
-                </button>
+                <button onClick={confirmAccess} className="w-full py-6 bg-emerald-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Enter Site</button>
               ) : (
                 <div className="space-y-4">
-                  <button onClick={() => setShowChat(true)} className="w-full py-5 border-2 border-blue-600 text-blue-600 font-black rounded-[32px] uppercase text-[10px] tracking-widest hover:bg-blue-600 hover:text-white transition-all">Command Hub Link</button>
+                  <button onClick={() => setShowChat(true)} className="w-full py-5 border-2 border-blue-600 text-blue-600 font-black rounded-[32px] uppercase text-[10px] tracking-widest hover:bg-blue-600 hover:text-white transition-all">Command Link Link</button>
                   <button onClick={closeModals} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Abort</button>
                 </div>
               )}
@@ -526,48 +535,48 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'LogoutProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
            <div className="bg-white w-full max-w-xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">End Mission</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={handleLogoutSubmit} className="p-10 space-y-8 overflow-y-auto">
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Mission End</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleLogoutSubmit} className="p-10 space-y-8">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={48} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Terminus Photo</p></div>}
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={48} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Mission Terminus Photo</p></div>}
                  </div>
                  <div className="space-y-6">
                     <input name="rocName" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-rose-500" placeholder="Sign-off Officer" />
                     <input name="rocTime" type="datetime-local" required className="w-full p-5 bg-slate-50 rounded-3xl font-bold text-xs" />
-                    <textarea name="remarks" className="w-full p-5 bg-slate-50 rounded-3xl font-medium text-sm italic min-h-[100px]" placeholder="Brief Summary of Works..."></textarea>
+                    <textarea name="remarks" className="w-full p-5 bg-slate-50 rounded-3xl font-medium text-sm italic min-h-[100px]" placeholder="Summary Brief..."></textarea>
                  </div>
-                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-rose-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">{isSubmitting ? 'Ending Mission...' : 'Terminate Protocol'}</button>
+                 <button type="submit" className="w-full py-6 bg-rose-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Terminate Protocol</button>
               </form>
            </div>
         </div>
       )}
       
-      {activeModal === 'KeyBorrow' && selectedSite && (
+      {activeModal === 'KeyReturn' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
-           <div className="bg-white w-full max-lg rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight">Key Handover</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Asset Frame Missing', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), raawaNumber: f.get('raawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-10 space-y-8 overflow-y-auto">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Evidence of Key Release</p></div>}</div>
-                 <div className="space-y-6">
-                    <input name="raawaNumber" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="RAAWA Reference" />
-                    <input name="reason" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="Purpose for Access" />
-                    <input name="releasedBy" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="Releasing Hub Officer" />
+           <div className="bg-white w-full max-md rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Key Restore</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={handleKeyReturnSubmit} className="p-10 space-y-8">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">
+                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={48} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Evidence of Return</p></div>}
                  </div>
-                 <button type="submit" className="w-full py-6 bg-amber-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Request Release</button>
+                 <button type="submit" className="w-full py-6 bg-amber-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Restore Node Control</button>
               </form>
            </div>
         </div>
       )}
 
-      {activeModal === 'KeyReturn' && selectedSite && (
+      {activeModal === 'KeyBorrow' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
-           <div className="bg-white w-full max-md rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Key Restore</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={handleKeyReturnSubmit} className="p-10 space-y-8 overflow-y-auto">
-                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">
-                    {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={48} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Restore Evidence</p></div>}
+           <div className="bg-white w-full max-lg rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight">Key Handover</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Asset Photo Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), raawaNumber: f.get('raawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-10 space-y-8 overflow-y-auto">
+                 <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Evidence of Release</p></div>}</div>
+                 <div className="space-y-6">
+                    <input name="raawaNumber" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="RAAWA Reference" />
+                    <input name="reason" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="Purpose for Release" />
+                    <input name="releasedBy" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase" placeholder="Sign-off Officer" />
                  </div>
-                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-amber-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">{isSubmitting ? 'Synchronizing...' : 'Restore Node Control'}</button>
+                 <button type="submit" className="w-full py-6 bg-amber-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Request Release</button>
               </form>
            </div>
         </div>
@@ -581,15 +590,13 @@ const VendorAccess: React.FC = () => {
                 <h2 className="text-3xl font-black uppercase tracking-tight">Compliance Link</h2>
               </div>
               <div className="space-y-5 text-sm font-medium text-slate-600 leading-relaxed max-h-[35vh] overflow-y-auto pr-4 custom-scrollbar">
-                <p>1. PPE MANDATE: Certify all mission personnel have required protection gear.</p>
-                <p>2. RAAWA ADHERENCE: All works will stay strictly within the approved parameters.</p>
-                <p>3. MONITORING: Forensic frames are recorded directly to FO Engineering Hub.</p>
+                <p>1. PPE MANDATE: Certify all mission personnel possess required safety gear.</p>
+                <p>2. RAAWA SCOPE: All works will be strictly within the approved RAAWA parameters.</p>
+                <p>3. MONITORING: Forensic frames are transmitted directly to FO Engineering.</p>
               </div>
               <div className="flex gap-4">
                 <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="flex-1 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Back</button>
-                <button onClick={finalizeRequest} disabled={isSubmitting} className="flex-[2] py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest hover:brightness-110 active:scale-95 transition-all">
-                  {isSubmitting ? 'Transmitting...' : 'Digitally Verify'}
-                </button>
+                <button onClick={finalizeRequest} className="flex-[2] py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Digitally Verify</button>
               </div>
            </div>
         </div>
@@ -598,9 +605,9 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'LoginProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
            <div className="bg-white w-full max-w-2xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Entry Matrix</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
-              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Identity Photo Required', 'error'); setLoginFormValues({ activity: f.get('activity'), raawaNumber: f.get('raawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-10 overflow-y-auto space-y-8">
-                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Enroll Lead Photo</p></div>}</div>
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Entry Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Identification Required', 'error'); setLoginFormValues({ activity: f.get('activity'), raawaNumber: f.get('raawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-10 overflow-y-auto space-y-8">
+                 <div onClick={() => startCamera('user')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Enroll Lead Operator Photo</p></div>}</div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-6">
                       <h3 className="text-xs font-black uppercase text-blue-600 tracking-widest ml-2">Team Unit</h3>
@@ -608,7 +615,7 @@ const VendorAccess: React.FC = () => {
                       <div className="space-y-4">
                         {additionalPersonnel.map((p, i) => (
                           <div key={i} className="flex gap-3">
-                            <input value={p} onChange={e => { const updated = [...additionalPersonnel]; updated[i] = e.target.value; setAdditionalPersonnel(updated); }} className="flex-1 p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-blue-600 transition-all" placeholder="Team Member" />
+                            <input value={p} onChange={e => { const updated = [...additionalPersonnel]; updated[i] = e.target.value; setAdditionalPersonnel(updated); }} className="flex-1 p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-blue-600 transition-all" placeholder="Unit Member" />
                             <button type="button" onClick={() => setAdditionalPersonnel(prev => prev.filter((_, idx) => idx !== i))} className="p-4 text-rose-500 bg-rose-50 rounded-2xl"><MinusCircle size={20} /></button>
                           </div>
                         ))}
@@ -616,10 +623,10 @@ const VendorAccess: React.FC = () => {
                       </div>
                     </div>
                     <div className="space-y-6">
-                      <h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest ml-2">Mission Parameters</h3>
+                      <h3 className="text-xs font-black uppercase text-emerald-600 tracking-widest ml-2">Parameters</h3>
                       <input name="activity" placeholder="Core Mission Activity" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-emerald-600 transition-all" />
                       <input name="raawaNumber" placeholder="RAAWA Ref #" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-emerald-600 transition-all" />
-                      <input name="checkedBy" placeholder="Verification Officer" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-emerald-600 transition-all" />
+                      <input name="checkedBy" placeholder="Guard Verification" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-emerald-600 transition-all" />
                     </div>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -627,7 +634,7 @@ const VendorAccess: React.FC = () => {
                    <div className="space-y-1.5"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-3">Expected OUT</label><input name="expectedEndTime" type="datetime-local" required className="w-full p-5 bg-slate-50 rounded-3xl font-bold text-xs" /></div>
                  </div>
                  <div className="bg-slate-900 rounded-[40px] p-8 text-white space-y-6">
-                   <h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">Authority Sign-off</h3>
+                   <h3 className="text-xs font-black uppercase text-blue-500 tracking-widest">Operational Sign-off</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <input name="rocName" placeholder="ROC Name" required className="w-full p-4 bg-white/5 rounded-2xl text-xs uppercase font-black" />
                      <input name="rocTime" type="datetime-local" required className="w-full p-4 bg-white/5 rounded-2xl text-xs font-bold" />
