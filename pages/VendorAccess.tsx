@@ -28,6 +28,9 @@ const VendorAccess: React.FC = () => {
   const [keyBorrowValues, setKeyBorrowValues] = useState<any>(null);
   const [additionalPersonnel, setAdditionalPersonnel] = useState<string[]>([]);
   
+  // NOC Requirements State
+  const [requiresNoc, setRequiresNoc] = useState(false);
+  
   const [showChat, setShowChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -42,8 +45,8 @@ const VendorAccess: React.FC = () => {
       const vendorFromStorage = apiService.getActiveVendor();
       if (fetchedSites) setSites(fetchedSites);
       
-      // PERSISTENCE CHECK: Only update state from storage if we don't have it or if storage changed
-      if (vendorFromStorage) {
+      // Persist vendor session if found in storage and not already set
+      if (!activeVendor && vendorFromStorage) {
         setActiveVendor(vendorFromStorage);
       }
     } catch (err) { 
@@ -171,7 +174,7 @@ const VendorAccess: React.FC = () => {
         } else {
           ctx.fillStyle = "#ffffff";
         }
-        ctx.fillText(r[1], fontSize * 10, startY + (i * lineSpacing));
+        ctx.fillText(r[1], fontSize * 11, startY + (i * lineSpacing));
       });
       
       setCapturedPhoto(c.toDataURL('image/jpeg', 0.9)); 
@@ -247,7 +250,7 @@ const VendorAccess: React.FC = () => {
         notify('Asset Released: Key Secured', 'success');
       }
       
-      // PERSISTENCE: Do not logout, reset UI states only
+      // SUCCESS: Preserve session, only reset operational UI
       setActiveModal(null);
       setWaitingFor(null);
       setCapturedPhoto(null);
@@ -312,17 +315,24 @@ const VendorAccess: React.FC = () => {
     setIsSubmitting(true);
     const f = new FormData(e.currentTarget);
     try {
+      // Corrected property names 'rocLogoutName' and 'rocLogoutTime' to match Partial<SiteVisitor> in apiService.checkOutVendor
       await apiService.checkOutVendor(selectedSite.id, capturedPhoto, {
         rocLogoutName: f.get('rocName') as string,
         rocLogoutTime: f.get('rocTime') as string,
-        activityRemarks: f.get('remarks') as string
+        activityRemarks: f.get('remarks') as string,
+        nocLogged: requiresNoc,
+        nocLoginName: f.get('nocLoginName') as string,
+        nocLoginTime: f.get('nocLoginTime') as string,
+        nocLogoutName: f.get('nocLogoutName') as string,
+        nocLogoutTime: f.get('nocLogoutTime') as string,
       });
       notify('Log Closed: Protocol Finalized', 'success');
       
-      // PERSISTENCE: Do not logout, reset UI states only
+      // SUCCESS: Preserve session, only reset operational UI
       setActiveModal(null);
       setSelectedSite(null);
       setCapturedPhoto(null);
+      setRequiresNoc(false);
       loadInitialData();
     } catch (err) { notify('Transmission Failure', 'error'); }
     finally { setIsSubmitting(false); }
@@ -336,7 +346,7 @@ const VendorAccess: React.FC = () => {
       await apiService.returnKey(selectedSite.id, capturedPhoto);
       notify('Asset Hub: Physical Key Restored', 'success');
       
-      // PERSISTENCE: Do not logout, reset UI states only
+      // SUCCESS: Preserve session, only reset operational UI
       setActiveModal(null);
       setSelectedSite(null);
       setCapturedPhoto(null);
@@ -345,7 +355,16 @@ const VendorAccess: React.FC = () => {
     finally { setIsSubmitting(false); }
   };
 
-  const closeModals = () => { setActiveModal(null); setWaitingFor(null); setCapturedPhoto(null); setStreamActive(false); setAdditionalPersonnel([]); setShowChat(false); setSelectedSite(null); };
+  const closeModals = () => { 
+    setActiveModal(null); 
+    setWaitingFor(null); 
+    setCapturedPhoto(null); 
+    setStreamActive(false); 
+    setAdditionalPersonnel([]); 
+    setShowChat(false); 
+    setSelectedSite(null); 
+    setRequiresNoc(false);
+  };
 
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
@@ -379,7 +398,7 @@ const VendorAccess: React.FC = () => {
 
       {/* CHAT BOX */}
       {showChat && activeVendor && (
-        <div className="fixed bottom-24 right-8 z-[550] w-full max-w-sm h-[500px] bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
+        <div className="fixed bottom-24 right-8 z-[550] w-full max-sm h-[500px] bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
           <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 bg-blue-600 rounded-2xl flex items-center justify-center"><Shield size={20} /></div>
@@ -497,7 +516,7 @@ const VendorAccess: React.FC = () => {
       {/* MODAL SYSTEM */}
       {activeModal === 'PersonnelLogin' && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
-           <div className="bg-white w-full max-w-md rounded-[56px] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-md rounded-[56px] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
               <div className="text-center space-y-4">
                  <div className="h-20 w-20 bg-emerald-50 text-emerald-600 rounded-3xl mx-auto flex items-center justify-center shadow-sm"><LogIn size={36} /></div>
                  <h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Portal Link</h2>
@@ -565,18 +584,46 @@ const VendorAccess: React.FC = () => {
       
       {activeModal === 'LogoutProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
-           <div className="bg-white w-full max-w-xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-w-2xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300 max-h-[95vh]">
               <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Terminus Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={handleLogoutSubmit} className="p-10 space-y-8 overflow-y-auto">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">
                     {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={48} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capture Terminus Frame</p></div>}
                  </div>
+                 
                  <div className="space-y-6">
                     <input name="rocName" required className="w-full p-5 bg-slate-50 rounded-3xl font-black text-sm uppercase outline-none focus:ring-2 focus:ring-rose-500" placeholder="Sign-off Officer" />
                     <input name="rocTime" type="datetime-local" required className="w-full p-5 bg-slate-50 rounded-3xl font-bold text-xs" />
+                    
+                    <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-3xl">
+                      <input 
+                        type="checkbox" 
+                        id="requiresNoc" 
+                        checked={requiresNoc} 
+                        onChange={(e) => setRequiresNoc(e.target.checked)}
+                        className="w-5 h-5 accent-blue-600"
+                      />
+                      <label htmlFor="requiresNoc" className="text-xs font-black uppercase text-blue-900 cursor-pointer">Activity requires NOC login/logout?</label>
+                    </div>
+
+                    {requiresNoc && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[32px] border border-slate-100 animate-in slide-in-from-top-2">
+                        <div className="space-y-4">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NOC Login</p>
+                           <input name="nocLoginName" required placeholder="Login Operator Name" className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-black uppercase" />
+                           <input name="nocLoginTime" type="datetime-local" required className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-bold" />
+                        </div>
+                        <div className="space-y-4">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NOC Logout</p>
+                           <input name="nocLogoutName" required placeholder="Logout Operator Name" className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-black uppercase" />
+                           <input name="nocLogoutTime" type="datetime-local" required className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-[10px] font-bold" />
+                        </div>
+                      </div>
+                    )}
+
                     <textarea name="remarks" className="w-full p-5 bg-slate-50 rounded-3xl font-medium text-sm italic min-h-[100px]" placeholder="Summary of Activity..."></textarea>
                  </div>
-                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-rose-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Finalize Logout</button>
+                 <button type="submit" disabled={isSubmitting} className="w-full py-6 bg-rose-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">{isSubmitting ? 'Syncing...' : 'Finalize Logout'}</button>
               </form>
            </div>
         </div>
@@ -627,7 +674,9 @@ const VendorAccess: React.FC = () => {
               </div>
               <div className="flex gap-4">
                 <button onClick={() => setActiveModal(waitingFor === 'SITE' ? 'LoginProtocol' : 'KeyBorrow')} className="flex-1 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Back</button>
-                <button onClick={finalizeRequest} disabled={isSubmitting} className="flex-[2] py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Digitally Verify</button>
+                <button onClick={finalizeRequest} disabled={isSubmitting} className="flex-[2] py-6 bg-slate-900 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest hover:brightness-110 active:scale-95 transition-all">
+                  {isSubmitting ? 'Transmitting...' : 'Digitally Verify'}
+                </button>
               </div>
            </div>
         </div>
@@ -636,7 +685,7 @@ const VendorAccess: React.FC = () => {
       {activeModal === 'LoginProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl">
            <div className="bg-white w-full max-w-2xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
-              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Entry Protocol</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Entry Matrix</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Identification Required', 'error'); setLoginFormValues({ activity: f.get('activity'), raawaNumber: f.get('raawaNumber'), checkedBy: f.get('checkedBy'), startTime: f.get('startTime'), expectedEndTime: f.get('expectedEndTime'), rocName: f.get('rocName'), rocTime: f.get('rocTime') }); setWaitingFor('SITE'); setActiveModal('Disclaimer'); }} className="p-10 overflow-y-auto space-y-8">
                  <div onClick={() => startCamera('user')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Enroll Lead Operator Photo</p></div>}</div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -671,7 +720,7 @@ const VendorAccess: React.FC = () => {
                      <input name="rocTime" type="datetime-local" required className="w-full p-4 bg-white/5 rounded-2xl text-xs font-bold" />
                    </div>
                  </div>
-                 <button type="submit" className="w-full py-6 bg-blue-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest">Transmit Entry Matrix</button>
+                 <button type="submit" className="w-full py-6 bg-blue-600 text-white font-black rounded-[32px] uppercase text-xs shadow-2xl tracking-widest hover:brightness-110 active:scale-95 transition-all">Transmit Entry Protocol</button>
               </form>
            </div>
         </div>
