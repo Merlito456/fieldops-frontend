@@ -57,31 +57,18 @@ const VendorAccess: React.FC = () => {
 
   useEffect(() => {
     let interval: number | null = null;
-    if ((activeModal === 'Waiting' || showChat) && selectedSite) {
-      interval = window.setInterval(async () => {
-        const freshSites = await apiService.getSites();
-        if (freshSites) setSites(freshSites);
-      }, 3000);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [activeModal, showChat, selectedSite]);
-
-  useEffect(() => {
-    let interval: number | null = null;
-    if (showChat && selectedSite) {
+    if (showChat && activeVendor) {
       const fetchMsgs = async () => {
         try {
-          const msgs = await apiService.getMessages(selectedSite.id);
+          const msgs = await apiService.getMessages(activeVendor.id);
           if (msgs) setChatMessages(msgs);
-        } catch (e) {
-          console.error("Chat fetch error:", e);
-        }
+        } catch (e) { console.error("Chat sync error"); }
       };
       fetchMsgs();
       interval = window.setInterval(fetchMsgs, 3000);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [showChat, selectedSite]);
+  }, [showChat, activeVendor]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -134,12 +121,12 @@ const VendorAccess: React.FC = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || !selectedSite || !activeVendor) return;
-    const msg = { siteId: selectedSite.id, senderId: activeVendor.id, senderName: activeVendor.fullName, role: 'VENDOR' as const, content: chatInput };
+    if (!chatInput.trim() || !activeVendor) return;
+    const msg = { vendorId: activeVendor.id, senderId: activeVendor.id, senderName: activeVendor.fullName, role: 'VENDOR' as const, content: chatInput, siteId: selectedSite?.id };
     setChatInput('');
     try {
       await apiService.sendMessage(msg);
-      const msgs = await apiService.getMessages(selectedSite.id);
+      const msgs = await apiService.getMessages(activeVendor.id);
       if (msgs) setChatMessages(msgs);
     } catch (err) { notify('Message failed to send', 'error'); }
   };
@@ -164,7 +151,7 @@ const VendorAccess: React.FC = () => {
         });
       } else if (waitingFor === 'KEY') {
         await apiService.requestKeyBorrow(selectedSite.id, { 
-          siteId: selectedSite.id, siteName: selectedSite.name, ...keyBorrowValues 
+          siteId: selectedSite.id, siteName: selectedSite.name, ...keyBorrowValues, borrowerId: activeVendor.id 
         });
       }
       setActiveModal('Waiting');
@@ -199,17 +186,13 @@ const VendorAccess: React.FC = () => {
       verified: true,
       createdAt: new Date().toISOString()
     };
-
     try {
       const registered = await apiService.registerVendor(vendorData);
       setActiveVendor(registered);
       notify('Identity Initialized', 'success');
       closeModals();
-    } catch (err) {
-      notify('Registration Failed', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (err) { notify('Registration Failed', 'error'); } 
+    finally { setIsSubmitting(false); }
   };
 
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -218,21 +201,15 @@ const VendorAccess: React.FC = () => {
     const f = new FormData(e.currentTarget);
     const username = f.get('username') as string;
     const password = f.get('password') as string;
-
     try {
       const vendor = await apiService.loginVendor(username, password);
       if (vendor) {
         setActiveVendor(vendor);
         notify(`Welcome back, ${vendor.fullName}`, 'success');
         closeModals();
-      } else {
-        notify('Invalid Credentials', 'error');
-      }
-    } catch (err) {
-      notify('Authentication Failure', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
+      } else { notify('Invalid Credentials', 'error'); }
+    } catch (err) { notify('Authentication Failure', 'error'); } 
+    finally { setIsSubmitting(false); }
   };
 
   const handleLogoutSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -271,6 +248,8 @@ const VendorAccess: React.FC = () => {
   const currentSiteState = selectedSite ? sites.find(s => s.id === selectedSite.id) : null;
   const isAuthorized = waitingFor === 'SITE' ? currentSiteState?.accessAuthorized : currentSiteState?.keyAccessAuthorized;
 
+  const unreadCount = chatMessages.filter(m => m.role === 'FO' && !m.isRead).length;
+
   if (isLoading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
@@ -297,17 +276,17 @@ const VendorAccess: React.FC = () => {
       )}
 
       {/* CHAT BOX */}
-      {showChat && selectedSite && (
+      {showChat && activeVendor && (
         <div className="fixed bottom-24 right-8 z-[200] w-full max-w-sm h-[500px] bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
           <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 bg-blue-600 rounded-2xl flex items-center justify-center"><Shield size={20} /></div>
-              <div><p className="text-xs font-black uppercase leading-tight">FO Command Link</p><p className="text-[9px] text-blue-400 font-bold uppercase">{selectedSite.name}</p></div>
+              <div><p className="text-xs font-black uppercase leading-tight">FO Global Support</p><p className="text-[9px] text-blue-400 font-bold uppercase">Direct Mission Link</p></div>
             </div>
             <button onClick={() => setShowChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
-            {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Waiting for FO transmission...</p>}
+            {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Awaiting FO handshake...</p>}
             {chatMessages.map(m => (
               <div key={m.id} className={`flex ${m.role === 'VENDOR' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[80%] p-4 rounded-3xl text-xs font-medium shadow-sm ${m.role === 'VENDOR' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
@@ -326,7 +305,7 @@ const VendorAccess: React.FC = () => {
       )}
 
       {/* PERSISTENT FLOATING MESSENGER BUTTON */}
-      {activeVendor && selectedSite && !showChat && (
+      {activeVendor && !showChat && (
         <button onClick={() => setShowChat(true)} className="fixed bottom-8 right-8 z-[190] h-16 w-16 bg-blue-600 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-blue-500/30">
           <div className="relative">
             <MessageSquare size={28} />
@@ -386,7 +365,6 @@ const VendorAccess: React.FC = () => {
                     <div className="p-4 bg-slate-50 rounded-2xl group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors shadow-sm"><Tower size={28} /></div>
                     <div className="flex flex-col items-end gap-2">
                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">{s.id}</span>
-                       <button onClick={() => { setSelectedSite(s); setShowChat(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><MessageSquare size={16} /></button>
                     </div>
                   </div>
                   <div>
@@ -429,16 +407,13 @@ const VendorAccess: React.FC = () => {
            </div>
         </div>
       )}
-
-      {/* ADDITIONAL MODALS (Waiting, Disclaimer, Logout, KeyReturn, Profile, KeyBorrow, LoginProtocol, Registration) */}
-      {/* ... keeping logic for the rest of the modals but ensuring they are correctly hooked up to state ... */}
       
       {activeModal === 'Profile' && activeVendor && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
            <div className="bg-white w-full max-w-md rounded-[56px] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
               <div className="p-12 bg-slate-900 text-white text-center space-y-6">
                  <div className="h-32 w-32 mx-auto rounded-[32px] overflow-hidden border-4 border-white/10 shadow-2xl">
-                    <img src={activeVendor.photo} className="w-full h-full object-cover" />
+                    <img src={activeVendor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${activeVendor.fullName}`} className="w-full h-full object-cover" />
                  </div>
                  <div>
                     <h2 className="text-3xl font-black uppercase tracking-tight">{activeVendor.fullName}</h2>
@@ -507,7 +482,7 @@ const VendorAccess: React.FC = () => {
       {/* LOGOUT PROTOCOL MODAL */}
       {activeModal === 'LogoutProtocol' && selectedSite && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-           <div className="bg-white w-full max-w-xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-xl rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
               <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Mission Termination</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={handleLogoutSubmit} className="p-10 space-y-8 overflow-y-auto max-h-[75vh]">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-blue-500 transition-all">
@@ -527,7 +502,7 @@ const VendorAccess: React.FC = () => {
       {/* KEY RETURN MODAL */}
       {activeModal === 'KeyReturn' && selectedSite && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-           <div className="bg-white w-full max-w-md rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-md rounded-[56px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
               <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight text-slate-900">Key Custody</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={handleKeyReturnSubmit} className="p-10 space-y-8">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">
@@ -542,7 +517,7 @@ const VendorAccess: React.FC = () => {
       {/* KEY REQUEST MODAL */}
       {activeModal === 'KeyBorrow' && selectedSite && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-           <div className="bg-white w-full max-w-lg rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
+           <div className="bg-white w-full max-lg rounded-[56px] shadow-2xl flex flex-col overflow-hidden max-h-[95vh] animate-in zoom-in duration-300">
               <div className="p-10 border-b border-slate-50 flex items-center justify-between"><h2 className="text-3xl font-black uppercase tracking-tight">Key Requisition</h2><button onClick={closeModals} className="p-2 hover:bg-slate-50 rounded-full"><X size={24} /></button></div>
               <form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); if (!capturedPhoto) return notify('Asset Photo Required', 'error'); setKeyBorrowValues({ borrowerName: activeVendor?.fullName, borrowerId: activeVendor?.idNumber, borrowerContact: activeVendor?.contactNumber, vendor: activeVendor?.company, reason: f.get('reason'), raawaNumber: f.get('raawaNumber'), releasedBy: f.get('releasedBy'), borrowPhoto: capturedPhoto }); setWaitingFor('KEY'); setActiveModal('Disclaimer'); }} className="p-10 overflow-y-auto space-y-8">
                  <div onClick={() => startCamera('environment')} className="aspect-video bg-slate-50 rounded-[40px] overflow-hidden cursor-pointer border-4 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 hover:border-amber-500 transition-all">{capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : <div className="text-center space-y-3"><Camera size={44} className="mx-auto text-slate-300" /><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Evidence Capture</p></div>}</div>
