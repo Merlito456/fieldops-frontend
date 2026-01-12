@@ -15,7 +15,7 @@ export const apiService = {
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // Increased timeout
+      const timeoutId = setTimeout(() => controller.abort(), 12000); 
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         signal: controller.signal,
@@ -53,6 +53,14 @@ export const apiService = {
     }
   },
 
+  getVendors: async (): Promise<VendorProfile[]> => {
+    try {
+      return await apiService.request<VendorProfile[]>('/vendors');
+    } catch {
+      return storageService.getVendors();
+    }
+  },
+
   addSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>('/sites', { method: 'POST', body: JSON.stringify(site) }),
   updateSite: async (site: WorkSite): Promise<WorkSite> => apiService.request<WorkSite>(`/sites/${site.id}`, { method: 'PUT', body: JSON.stringify(site) }),
 
@@ -81,7 +89,8 @@ export const apiService = {
     return await apiService.request(`/keys/return/${siteId}`, { method: 'POST', body: JSON.stringify({ returnPhoto: photoUrl }) });
   },
 
-  getMessages: async (siteId: string): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>(`/messages/${siteId}`),
+  getMessages: async (vendorId: string): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>(`/messages/${vendorId}`),
+  getAllMessages: async (): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>('/messages'),
   sendMessage: async (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => apiService.request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
 
   loginVendor: async (username: string, password?: string): Promise<VendorProfile | null> => apiService.request<VendorProfile | null>('/auth/vendor/login', {
