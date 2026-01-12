@@ -15,7 +15,9 @@ export const apiService = {
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); 
+      // Increase timeout for Render cold-starts
+      const timeoutId = setTimeout(() => controller.abort(), 30000); 
+      
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         signal: controller.signal,
@@ -24,7 +26,11 @@ export const apiService = {
       clearTimeout(timeoutId);
       
       if (response.status === 401) throw new Error('AUTH_FAILED');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error(`API_ERROR [${endpoint}]:`, response.status, errData);
+        throw new Error(`HTTP_${response.status}`);
+      }
       
       this.isOffline = false;
       return await response.json();
@@ -32,8 +38,8 @@ export const apiService = {
       if (error.message === 'AUTH_FAILED') throw error;
       
       this.isOffline = true;
-      console.warn(`Bridge Failure: ${endpoint}`, error.message);
-      throw new Error('BRIDGE_OFFLINE');
+      console.warn(`Bridge Link Failed: ${endpoint}`, error.message);
+      throw new Error(error.name === 'AbortError' ? 'TIMEOUT' : 'BRIDGE_OFFLINE');
     }
   },
 
@@ -91,7 +97,11 @@ export const apiService = {
 
   getMessages: async (vendorId: string): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>(`/messages/${vendorId}`),
   getAllMessages: async (): Promise<ChatMessage[]> => apiService.request<ChatMessage[]>('/messages'),
-  sendMessage: async (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => apiService.request('/messages', { method: 'POST', body: JSON.stringify(msg) }),
+  sendMessage: async (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    // Explicitly handle vendor_id naming to prevent backend rejection
+    const payload = { ...msg, vendor_id: msg.vendorId };
+    return apiService.request('/messages', { method: 'POST', body: JSON.stringify(payload) });
+  },
   markMessagesAsRead: async (vendorId: string) => apiService.request(`/messages/read/${vendorId}`, { method: 'PATCH' }),
 
   loginVendor: async (username: string, password?: string): Promise<VendorProfile | null> => apiService.request<VendorProfile | null>('/auth/vendor/login', {
