@@ -20,6 +20,7 @@ const Dashboard: React.FC = () => {
   const [activeChatSiteId, setActiveChatSiteId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [showFloatingChat, setShowFloatingChat] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { notify } = useNotify();
@@ -44,16 +45,16 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     let interval: number | null = null;
-    if (activeChatSiteId) {
+    if (activeChatSiteId && (showFloatingChat || activeChatSiteId)) {
       const fetchMsgs = async () => {
         const msgs = await apiService.getMessages(activeChatSiteId);
         if (msgs) setChatMessages(msgs);
       };
-      fetchMsgs(); // Initial fetch
+      fetchMsgs(); 
       interval = window.setInterval(fetchMsgs, 3000);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [activeChatSiteId]);
+  }, [activeChatSiteId, showFloatingChat]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -77,36 +78,88 @@ const Dashboard: React.FC = () => {
   if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 size={48} className="text-blue-600 animate-spin" /></div>;
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700 pb-20">
+    <div className="relative min-h-full space-y-10 animate-in fade-in duration-700 pb-20">
       {fullScreenImage && <div className="fixed inset-0 z-[100] bg-slate-900/98 backdrop-blur-xl flex items-center justify-center p-10" onClick={() => setFullScreenImage(null)}><button className="absolute top-8 right-8 text-white"><X size={32} /></button><img src={fullScreenImage} className="max-w-full max-h-full rounded-[40px] shadow-2xl" /></div>}
 
-      {/* CHAT MODAL FO SIDE */}
-      {activeChatSiteId && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-white w-full max-w-xl h-[80vh] rounded-[48px] shadow-2xl flex flex-col overflow-hidden">
-            <div className="p-8 bg-blue-600 text-white flex justify-between items-center">
-              <div><h2 className="text-2xl font-black uppercase">Vendor Comms Hub</h2><p className="text-[10px] font-black text-blue-100 uppercase">{sites.find(s => s.id === activeChatSiteId)?.name}</p></div>
-              <button onClick={() => setActiveChatSiteId(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={24} /></button>
+      {/* FLOATING MESSENGER FO SIDE */}
+      {showFloatingChat && (
+        <div className="fixed bottom-24 right-8 z-[150] w-full max-w-sm h-[550px] bg-white rounded-[40px] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
+          <div className="p-6 bg-slate-900 text-white flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={18} className="text-blue-500" />
+                <h3 className="text-xs font-black uppercase tracking-tight">FO Comms Hub</h3>
+              </div>
+              <button onClick={() => setShowFloatingChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
             </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/50">
-              {chatMessages.length === 0 && <p className="text-center py-20 text-[10px] font-black text-slate-400 uppercase tracking-widest">Awaiting Vendor communication link...</p>}
-              {chatMessages.map(m => (
-                <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] p-5 rounded-3xl text-sm font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
-                    <p className={`text-[8px] font-black uppercase mb-1 ${m.role === 'FO' ? 'text-blue-100' : 'text-blue-600'}`}>{m.senderName}</p>
-                    <p>{m.content}</p>
-                    <p className={`text-[8px] mt-2 font-bold ${m.role === 'FO' ? 'text-blue-200' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString()}</p>
-                  </div>
-                </div>
+            <select 
+              value={activeChatSiteId || ''} 
+              onChange={(e) => setActiveChatSiteId(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl p-2 text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="" className="text-slate-900">Select Site Link...</option>
+              {sites.map(s => (
+                <option key={s.id} value={s.id} className="text-slate-900">{s.name}</option>
               ))}
-              <div ref={chatEndRef} />
-            </div>
-            <div className="p-6 bg-white border-t border-slate-100 flex gap-4">
-              <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendChat()} placeholder="Direct message to Vendor..." className="flex-1 px-6 py-4 bg-slate-50 rounded-2xl text-sm font-black outline-none focus:ring-4 focus:ring-blue-600/10" />
-              <button onClick={handleSendChat} className="p-4 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-500/20"><Send size={24} /></button>
-            </div>
+            </select>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+            {!activeChatSiteId ? (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-3 p-6">
+                <Tower size={32} className="text-slate-300" />
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Select a site from the registry above to establish a vendor comms link.</p>
+              </div>
+            ) : (
+              <>
+                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Waiting for vendor handshake...</p>}
+                {chatMessages.map(m => (
+                  <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] p-4 rounded-3xl text-[11px] font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
+                      <p className={`text-[8px] font-black uppercase mb-1 ${m.role === 'FO' ? 'text-blue-200' : 'text-blue-600'}`}>{m.senderName}</p>
+                      <p>{m.content}</p>
+                      <p className={`text-[7px] mt-1.5 font-bold ${m.role === 'FO' ? 'text-blue-300' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString()}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </>
+            )}
+          </div>
+
+          <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
+            <input 
+              value={chatInput} 
+              onChange={e => setChatInput(e.target.value)} 
+              onKeyPress={e => e.key === 'Enter' && handleSendChat()} 
+              disabled={!activeChatSiteId}
+              placeholder="Message to site personnel..." 
+              className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-[11px] font-black outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50" 
+            />
+            <button 
+              onClick={handleSendChat} 
+              disabled={!activeChatSiteId}
+              className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 disabled:opacity-50"
+            >
+              <Send size={18} />
+            </button>
           </div>
         </div>
+      )}
+
+      {/* FO FLOATING CHAT BUTTON */}
+      {!showFloatingChat && (
+        <button 
+          onClick={() => setShowFloatingChat(true)} 
+          className="fixed bottom-8 right-8 z-[140] h-16 w-16 bg-slate-900 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+        >
+          <div className="relative">
+            <MessageSquare size={28} />
+            {(pendingAccess.length > 0 || pendingKeys.length > 0) && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 bg-rose-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
+            )}
+          </div>
+        </button>
       )}
 
       {(pendingAccess.length > 0 || pendingKeys.length > 0) && (
@@ -123,7 +176,10 @@ const Dashboard: React.FC = () => {
                       <div className="flex-1">
                         <p className="text-xs font-black text-blue-600 uppercase mb-1">{s.pendingVisitor?.raawaNumber || 'NO_RAAWA'}</p>
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
-                        <div className="flex gap-2 mt-3"><span className="text-[8px] font-black uppercase px-2 py-1 bg-white rounded border">{s.pendingVisitor?.vendor}</span><button onClick={() => setActiveChatSiteId(s.id)} className="text-[8px] font-black uppercase px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1"><MessageSquare size={10} /> Message</button></div>
+                        <div className="flex gap-2 mt-3">
+                          <span className="text-[8px] font-black uppercase px-2 py-1 bg-white rounded border">{s.pendingVisitor?.vendor}</span>
+                          <button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="text-[8px] font-black uppercase px-2 py-1 bg-blue-600 text-white rounded flex items-center gap-1"><MessageSquare size={10} /> Message</button>
+                        </div>
                       </div>
                       <div className="flex gap-2"><button onClick={() => handleAuthorizeAccess(s.id)} className="h-14 w-14 bg-emerald-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => handleDenyAccess(s.id)} className="h-14 w-14 bg-white border text-slate-400 rounded-2xl flex items-center justify-center"><X size={24} /></button></div>
                    </div>
@@ -138,7 +194,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-black text-slate-900 uppercase leading-none">{s.name}</h4>
                         <p className="text-[9px] font-bold text-amber-500 uppercase mt-2 italic">Release: {s.pendingKeyLog?.releasedBy}</p>
                       </div>
-                      <div className="flex gap-2"><button onClick={() => handleAuthorizeKey(s.id)} className="h-14 w-14 bg-amber-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => setActiveChatSiteId(s.id)} className="h-14 w-14 bg-white border text-blue-600 rounded-2xl flex items-center justify-center"><MessageSquare size={24} /></button></div>
+                      <div className="flex gap-2"><button onClick={() => handleAuthorizeKey(s.id)} className="h-14 w-14 bg-amber-600 text-white rounded-2xl shadow-lg flex items-center justify-center"><Check size={24} /></button><button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="h-14 w-14 bg-white border text-blue-600 rounded-2xl flex items-center justify-center"><MessageSquare size={24} /></button></div>
                    </div>
                 </div>
               ))}
@@ -164,7 +220,7 @@ const Dashboard: React.FC = () => {
                          {s.currentVisitor?.photo && <img src={s.currentVisitor.photo} className="h-12 w-12 rounded-xl object-cover shadow-md" />}
                          <div><h4 className="text-sm font-black uppercase tracking-tight">{s.currentVisitor?.leadName}</h4><p className="text-[9px] font-bold text-slate-400 uppercase">{s.currentVisitor?.vendor}</p></div>
                       </div>
-                      <button onClick={() => setActiveChatSiteId(s.id)} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
+                      <button onClick={() => { setActiveChatSiteId(s.id); setShowFloatingChat(true); }} className="relative p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-110 transition-transform">
                         <MessageSquare size={16} />
                         <span className="absolute -top-1 -right-1 h-3 w-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
                       </button>
