@@ -47,8 +47,12 @@ const Dashboard: React.FC = () => {
     let interval: number | null = null;
     if (activeChatSiteId && (showFloatingChat || activeChatSiteId)) {
       const fetchMsgs = async () => {
-        const msgs = await apiService.getMessages(activeChatSiteId);
-        if (msgs) setChatMessages(msgs);
+        try {
+          const msgs = await apiService.getMessages(activeChatSiteId);
+          if (msgs) setChatMessages(msgs);
+        } catch (e) {
+          console.error("Chat sync error:", e);
+        }
       };
       fetchMsgs(); 
       interval = window.setInterval(fetchMsgs, 3000);
@@ -66,9 +70,13 @@ const Dashboard: React.FC = () => {
     if (!chatInput.trim() || !activeChatSiteId) return;
     const msg = { siteId: activeChatSiteId, senderId: 'FO-001', senderName: 'FO ENG', role: 'FO' as const, content: chatInput };
     setChatInput('');
-    await apiService.sendMessage(msg);
-    const msgs = await apiService.getMessages(activeChatSiteId);
-    if (msgs) setChatMessages(msgs);
+    try {
+      await apiService.sendMessage(msg);
+      const msgs = await apiService.getMessages(activeChatSiteId);
+      if (msgs) setChatMessages(msgs);
+    } catch (err) {
+      notify('Failed to send message', 'error');
+    }
   };
 
   const pendingAccess = sites.filter(s => s.pendingVisitor && !s.accessAuthorized);
@@ -95,29 +103,34 @@ const Dashboard: React.FC = () => {
             <select 
               value={activeChatSiteId || ''} 
               onChange={(e) => setActiveChatSiteId(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-2 text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-white/10 border border-white/20 rounded-xl p-2.5 text-[11px] font-black uppercase outline-none focus:ring-2 focus:ring-blue-500 transition-all text-white"
             >
-              <option value="" className="text-slate-900">Select Site Link...</option>
+              <option value="" className="text-slate-900">Select Active Site Link...</option>
               {sites.map(s => (
-                <option key={s.id} value={s.id} className="text-slate-900">{s.name}</option>
+                <option key={s.id} value={s.id} className="text-slate-900">{s.name} ({s.id})</option>
               ))}
             </select>
           </div>
           
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
             {!activeChatSiteId ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-3 p-6">
-                <Tower size={32} className="text-slate-300" />
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Select a site from the registry above to establish a vendor comms link.</p>
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 p-8">
+                <div className="h-16 w-16 bg-slate-100 rounded-3xl flex items-center justify-center text-slate-300">
+                  <Tower size={32} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">System Standby</p>
+                  <p className="text-[9px] text-slate-400 font-bold mt-1">Establish a link with a site node to initiate vendor communications.</p>
+                </div>
               </div>
             ) : (
               <>
-                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Waiting for vendor handshake...</p>}
+                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Channel Empty. Awaiting vendor ping...</p>}
                 {chatMessages.map(m => (
                   <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] p-4 rounded-3xl text-[11px] font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
                       <p className={`text-[8px] font-black uppercase mb-1 ${m.role === 'FO' ? 'text-blue-200' : 'text-blue-600'}`}>{m.senderName}</p>
-                      <p>{m.content}</p>
+                      <p className="leading-relaxed">{m.content}</p>
                       <p className={`text-[7px] mt-1.5 font-bold ${m.role === 'FO' ? 'text-blue-300' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString()}</p>
                     </div>
                   </div>
@@ -133,13 +146,13 @@ const Dashboard: React.FC = () => {
               onChange={e => setChatInput(e.target.value)} 
               onKeyPress={e => e.key === 'Enter' && handleSendChat()} 
               disabled={!activeChatSiteId}
-              placeholder="Message to site personnel..." 
+              placeholder="Send instruction to vendor..." 
               className="flex-1 px-4 py-3 bg-slate-50 rounded-2xl text-[11px] font-black outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50" 
             />
             <button 
               onClick={handleSendChat} 
-              disabled={!activeChatSiteId}
-              className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 disabled:opacity-50"
+              disabled={!activeChatSiteId || !chatInput.trim()}
+              className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
             >
               <Send size={18} />
             </button>
@@ -151,11 +164,11 @@ const Dashboard: React.FC = () => {
       {!showFloatingChat && (
         <button 
           onClick={() => setShowFloatingChat(true)} 
-          className="fixed bottom-8 right-8 z-[140] h-16 w-16 bg-slate-900 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+          className="fixed bottom-8 right-8 z-[140] h-16 w-16 bg-slate-900 text-white rounded-3xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
         >
           <div className="relative">
-            <MessageSquare size={28} />
-            {(pendingAccess.length > 0 || pendingKeys.length > 0) && (
+            <MessageSquare size={28} className="group-hover:rotate-12 transition-transform" />
+            {(pendingAccess.length > 0 || pendingKeys.length > 0 || activeVisitors.length > 0) && (
               <span className="absolute -top-1 -right-1 h-4 w-4 bg-rose-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
             )}
           </div>
