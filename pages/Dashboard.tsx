@@ -56,8 +56,12 @@ const Dashboard: React.FC = () => {
     if (activeChatVendorId) {
       const vendorMsgs = allMessages.filter(m => m.vendorId === activeChatVendorId);
       setChatMessages(vendorMsgs);
+      // Automatically mark as read if the chat is open
+      if (showFloatingChat && vendorMsgs.some(m => m.role === 'VENDOR' && !m.isRead)) {
+        apiService.markMessagesAsRead(activeChatVendorId);
+      }
     }
-  }, [allMessages, activeChatVendorId]);
+  }, [allMessages, activeChatVendorId, showFloatingChat]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -77,7 +81,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // UI Logic: Sort vendors by latest message timestamp
+  // Sort vendors by latest message timestamp (FB Messenger style)
   const getSortedVendors = () => {
     return [...vendors].sort((a, b) => {
       const aMsgs = allMessages.filter(m => m.vendorId === a.id);
@@ -89,18 +93,14 @@ const Dashboard: React.FC = () => {
   };
 
   const getUnreadCount = (vendorId: string) => {
-    // Basic logic: Count VENDOR messages that are unread (simulated unread as messages since last open)
-    const msgs = allMessages.filter(m => m.vendorId === vendorId && m.role === 'VENDOR');
-    // If user is currently chatting with this vendor, unread is 0
-    if (activeChatVendorId === vendorId) return 0;
-    return msgs.length > 0 ? msgs.length : 0; // In a real app we'd track isRead in DB
+    return allMessages.filter(m => m.vendorId === vendorId && m.role === 'VENDOR' && !m.isRead).length;
   };
 
   const pendingAccess = sites.filter(s => s.pendingVisitor && !s.accessAuthorized);
   const pendingKeys = sites.filter(s => s.pendingKeyLog && !s.keyAccessAuthorized);
   const activeVisitors = sites.filter(s => s.currentVisitor);
   
-  const totalUnreadMessages = vendors.reduce((acc, v) => acc + (getUnreadCount(v.id) > 0 ? 1 : 0), 0);
+  const totalUnreadMessages = vendors.reduce((acc, v) => acc + getUnreadCount(v.id), 0);
 
   if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 size={48} className="text-blue-600 animate-spin" /></div>;
 
@@ -115,33 +115,43 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquare size={18} className="text-blue-500" />
-                <h3 className="text-xs font-black uppercase tracking-tight">Vendor Comms Hub</h3>
+                <h3 className="text-xs font-black uppercase tracking-tight">Personnel Comms</h3>
               </div>
               <button onClick={() => setShowFloatingChat(false)} className="p-2 hover:bg-white/10 rounded-full"><X size={18} /></button>
             </div>
             
-            {/* VENDOR SELECTOR (MESSENGER STYLE) */}
-            <div className="flex flex-col gap-1 max-h-32 overflow-y-auto custom-scrollbar">
+            {/* SCROLLABLE VENDOR LIST (FB MESSENGER STYLE) */}
+            <div className="flex flex-col gap-1 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+              {getSortedVendors().length === 0 && <p className="text-[8px] font-black uppercase text-slate-500 text-center py-4">No Registered Units</p>}
               {getSortedVendors().map(v => {
                 const unread = getUnreadCount(v.id);
                 const isActive = activeChatVendorId === v.id;
+                const lastMsg = allMessages.filter(m => m.vendorId === v.id).pop();
+                
                 return (
                   <button 
                     key={v.id} 
-                    onClick={() => setActiveChatVendorId(v.id)}
-                    className={`flex items-center justify-between p-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
+                    onClick={() => { setActiveChatVendorId(v.id); apiService.markMessagesAsRead(v.id); }}
+                    className={`flex items-center justify-between p-3 rounded-2xl transition-all group ${isActive ? 'bg-blue-600 shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
                   >
-                    <div className="flex items-center gap-3">
-                       <div className="h-8 w-8 rounded-full bg-slate-800 border border-white/20 overflow-hidden">
-                          <img src={v.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.fullName}`} className="h-full w-full object-cover" />
+                    <div className="flex items-center gap-3 min-w-0">
+                       <div className="relative flex-shrink-0">
+                         <div className="h-9 w-9 rounded-full bg-slate-800 border border-white/20 overflow-hidden shadow-inner">
+                            <img src={v.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${v.fullName}`} className="h-full w-full object-cover" />
+                         </div>
+                         {unread > 0 && !isActive && (
+                           <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-blue-500 border-2 border-slate-900 rounded-full animate-pulse shadow-lg"></span>
+                         )}
                        </div>
-                       <div className="text-left">
-                          <p className="text-[10px] font-black uppercase leading-none">{v.fullName}</p>
-                          <p className={`text-[8px] font-bold mt-0.5 ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>{v.company}</p>
+                       <div className="text-left min-w-0">
+                          <p className={`text-[10px] font-black uppercase leading-none truncate ${isActive ? 'text-white' : 'text-slate-100'}`}>{v.fullName}</p>
+                          <p className={`text-[8px] font-bold mt-1 truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                            {lastMsg ? lastMsg.content : 'Open link...'}
+                          </p>
                        </div>
                     </div>
                     {unread > 0 && !isActive && (
-                      <span className="h-2 w-2 bg-blue-500 rounded-full animate-pulse shadow-lg shadow-blue-500/50"></span>
+                      <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded-md ml-2">{unread}</span>
                     )}
                   </button>
                 );
@@ -152,23 +162,23 @@ const Dashboard: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
             {!activeChatVendorId ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4 p-8">
-                <div className="h-16 w-16 bg-slate-100 rounded-3xl flex items-center justify-center text-slate-300">
+                <div className="h-16 w-16 bg-white rounded-[24px] border border-slate-100 flex items-center justify-center text-slate-300 shadow-sm">
                   <Users size={32} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Select Personnel</p>
-                  <p className="text-[9px] text-slate-400 font-bold mt-1">Select a vendor unit from the ledger above to open a secure channel.</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">System Ready</p>
+                  <p className="text-[9px] text-slate-400 font-bold mt-1">Select a vendor from the list above to view transmission history.</p>
                 </div>
               </div>
             ) : (
               <>
-                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Channel Established. Send a signal.</p>}
+                {chatMessages.length === 0 && <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest mt-10">Waiting for first signal...</p>}
                 {chatMessages.map(m => (
                   <div key={m.id} className={`flex ${m.role === 'FO' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] p-4 rounded-3xl text-[11px] font-medium shadow-sm ${m.role === 'FO' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-100'}`}>
                       <p className={`text-[8px] font-black uppercase mb-1 ${m.role === 'FO' ? 'text-blue-200' : 'text-blue-600'}`}>{m.senderName}</p>
                       <p className="leading-relaxed">{m.content}</p>
-                      <p className={`text-[7px] mt-1.5 font-bold ${m.role === 'FO' ? 'text-blue-300' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString()}</p>
+                      <p className={`text-[7px] mt-1.5 font-bold ${m.role === 'FO' ? 'text-blue-300' : 'text-slate-400'}`}>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                   </div>
                 ))}
@@ -205,7 +215,7 @@ const Dashboard: React.FC = () => {
         >
           <div className="relative">
             <MessageSquare size={28} className="group-hover:rotate-12 transition-transform" />
-            {(totalUnreadMessages > 0) && (
+            {totalUnreadMessages > 0 && (
               <span className="absolute -top-2 -right-2 h-6 w-6 bg-rose-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-slate-900 animate-bounce">
                 {totalUnreadMessages}
               </span>
