@@ -22,12 +22,14 @@ export interface VendorProfile {
 
 export interface ChatMessage {
   id: string;
-  siteId: string;
+  vendorId: string; // Changed from siteId to vendorId for persistent vendor-FO links
+  siteId?: string;  // Keep siteId as optional context
   senderId: string;
   senderName: string;
   role: 'VENDOR' | 'FO';
   content: string;
   timestamp: string;
+  isRead?: boolean;
 }
 
 export interface SiteVisitor {
